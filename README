@@ -1,0 +1,42 @@
+This is the README file for the MeshLink library. Installation instructions may
+be found in the INSTALL file.
+
+MeshLink is Copyright (C) 2014-2018 Guus Sliepen <guus@meshlink.io>
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or (at
+your option) any later version. See the file COPYING for more details.
+
+To obtain a license to use this library in commercial software, please contact
+sales@meshlink.io.
+
+
+This is not a finished version
+------------------------------
+
+Please do not use this library yet.
+
+
+Requirements
+------------
+
+In order to compile MeshLink, you will need a GNU C compiler environment.
+
+
+Features
+--------
+
+MeshLink is a library that allows applications to connect to other instances of
+itself, and exchange messages in a secure way. MeshLink provides end-to-end
+encryption and authentication of messages with perfect forward secrecy. The
+MeshLink library starts its own thread which handles all network
+communications. The application only needs to register callbacks to get
+notified of incoming messages and other important events.
+
+Other noteworthy features are:
+
+- IPv6 support
+- NAT traversal (requires at least one node that is not behind a NAT)
+- Ed25519 keys (TBD)
+- ChaCha-Poly1305 encryption and message authentication

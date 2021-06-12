@@ -1,0 +1,41 @@
+TODO list for MeshLink
+----------------------
+
+* meshlink_join():
+  - add checks that we only join another mesh if we did not connect to any other node before.
+  - only allow meshlink_join() when the library thread is not running.
+  - remove old host config file if the invitation gave the node a different name.
+  - how to handle nodes that are part of one mesh and want to join another?
+
+* meshlink_leave()?
+  - leaving a mesh is basically starting all over again, with new private keys?
+
+* Allow meshlink_open() to be called with a NULL name, in anticipation of meshlink_join().
+  - Do not allow meshlink_start() if no Name is set.
+
+* Add autoconf/automake stuff to call Doxygen.
+
+* Write a manual
+  - Add introduction and walkthrough how to use MeshLink in an application to
+    the doxygen manual.
+  - Explain what MeshLink does and how it should be used in the application
+  - Import examples into the manual?
+  - List possible ways of synchronisation between application and library threads
+    - simple polling
+    - pthread_cond?
+    - pipe() to signal an event loop of the application's choice
+    - whatever equivalent(s) there are on Windows
+
+Not finished but being worked on:
+---------------------------------
+
+* Provide thread-safety to functions that return pointers to meshlink_node_t.
+  - The mesh->nodes tree can be updated by the library thread at any time,
+    so it must be protected by a mutex or rwlock.
+  - Individial node_t's must never be freed or moved except in meshlink_close().
+  - Check all public API functions.
+
+* Write a test suite for the library.
+
+* Add a "channel" library to MeshLink.
+  - Support multiple TCP- and UDP-like streams between two nodes.

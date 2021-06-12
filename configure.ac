@@ -1,0 +1,169 @@
+dnl Process this file with autoconf to produce a configure script.
+
+AC_PREREQ(2.69)
+AC_INIT([MeshLink], [0.1])
+DX_PS_FEATURE(OFF)
+DX_INIT_DOXYGEN([MeshLink], [$(top_srcdir)/Doxyfile])
+AM_INIT_AUTOMAKE([std-options subdir-objects nostdinc silent-rules -Wall])
+AC_CONFIG_HEADERS([config.h])
+AC_CONFIG_MACRO_DIR([m4])
+AM_SILENT_RULES([yes])
+
+# Enable GNU extensions.
+# Define this here, not in acconfig's @TOP@ section, since definitions
+# in the latter don't make it into the configure-time tests.
+AC_USE_SYSTEM_EXTENSIONS
+AC_DEFINE([__USE_BSD], 1, [Enable BSD extensions])
+AC_DEFINE([_POSIX_C_SOURCE], 200809L, [Enable POSIX features])
+AC_DEFINE([_DARWIN_C_SOURCE], 1, [Enable Darwin features])
+
+dnl Checks for programs.
+AM_PROG_CC_C_O
+AM_PROG_AR
+AC_PROG_CC
+AC_PROG_CC_C99
+AC_PROG_CXX
+AC_PROG_CPP
+AC_PROG_INSTALL
+AC_PROG_LN_S
+LT_INIT
+AX_PTHREAD
+
+dnl Check and set OS
+
+AC_CANONICAL_HOST
+
+case $host_os in
+  *linux*)
+    linux=true
+    AC_DEFINE(HAVE_LINUX, 1, [Linux])
+  ;;
+  *mingw*)
+    mingw=true
+    AC_DEFINE(HAVE_MINGW, 1, [MinGW])
+    LIBS="$LIBS -lws2_32 -lgdi32 -lcrypt32"
+  ;;
+  *darwin* | *ios*)
+    LIBS="$LIBS -framework Foundation -framework SystemConfiguration"
+  ;;
+esac
+
+AM_CONDITIONAL(LINUX, test "$linux" = true)
+AM_CONDITIONAL(MINGW, test "$mingw" = true)
+
+AC_CACHE_SAVE
+
+if test -d /sw/include ; then
+  CPPFLAGS="$CPPFLAGS -I/sw/include"
+fi
+if test -d /sw/lib ; then
+  LIBS="$LIBS -L/sw/lib"
+fi
+
+AX_CHECK_COMPILE_FLAG([-std=c11], [CFLAGS="$CFLAGS -std=c11"])
+
+dnl Compiler hardening flags
+dnl No -fstack-protector-all because it doesn't work on all platforms or architectures.
+
+AC_ARG_ENABLE([hardening], AS_HELP_STRING([--disable-hardening], [disable compiler and linker hardening flags]))
+AS_IF([test "x$enable_hardening" != "xno"],
+  [CPPFLAGS="$CPPFLAGS -Wall -W -pedantic"
+   AX_CHECK_COMPILE_FLAG([-DFORTIFY_SOURCE=2], [CPPFLAGS="$CPPFLAGS -DFORITFY_SOURCE=2"])
+   AX_CHECK_COMPILE_FLAG([-fwrapv], [CPPFLAGS="$CPPFLAGS -fwrapv"],
+     [AX_CHECK_COMPILE_FLAG([-fno-strict-overflow], [CPPFLAGS="$CPPFLAGS -fno-strict-overflow"])]
+   )
+   case $host_os in
+     *mingw*)
+       AX_CHECK_LINK_FLAG([-Wl,--dynamicbase], [LDFLAGS="$LDFLAGS -Wl,--dynamicbase"])
+       AX_CHECK_LINK_FLAG([-Wl,--nxcompat], [LDFLAGS="$LDFLAGS -Wl,--nxcompat"])
+       ;;
+     *)
+       AX_CHECK_COMPILE_FLAG([-fPIC], [CPPFLAGS="$CPPFLAGS -fPIC"])
+       ;;
+   esac
+   AX_CHECK_LINK_FLAG([-Wl,-z,relro], [LDFLAGS="$LDFLAGS -Wl,-z,relro"])
+   AX_CHECK_LINK_FLAG([-Wl,-z,now], [LDFLAGS="$LDFLAGS -Wl,-z,now"])
+   AX_CHECK_COMPILE_FLAG([-Wextra -pedantic -Wreturn-type -Wold-style-definition -Wmissing-declarations -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls -Wshadow -Wbad-function-cast -Wwrite-strings -fdiagnostics-show-option -fstrict-aliasing -Wmissing-noreturn], [CPPFLAGS="$CPPFLAGS -Wextra -pedantic -Wreturn-type -Wold-style-definition -Wmissing-declarations -Wmissing-prototypes -Wstrict-prototypes -Wredundant-decls -Wshadow -Wbad-function-cast -Wwrite-strings -fdiagnostics-show-option -fstrict-aliasing -Wmissing-noreturn"])
+  ]
+);
+
+dnl UTCP debug flags
+AC_ARG_ENABLE([utcp_debug], AS_HELP_STRING([--enable-utcp-debug], [compile utcp with debug output]))
+AS_IF([test "x$enable_utcp_debug" = "xyes"],
+  [AX_CHECK_COMPILE_FLAG([-DUTCP_DEBUG], [CPPFLAGS="$CPPFLAGS -DUTCP_DEBUG"])
+  ]
+);
+
+dnl Blackbox test suite
+PKG_CHECK_MODULES([CMOCKA], [cmocka >= 1.1.0], [cmocka=true], [cmocka=false])
+PKG_CHECK_MODULES([LXC], [lxc >= 2.0.0], [lxc=true], [lxc=false])
+AM_CONDITIONAL(BLACKBOX_TESTS, test "$cmocka" = true -a "$lxc" = true)
+
+
+dnl Additional example code
+PKG_CHECK_MODULES([NCURSES], [ncurses >= 5], [curses=true], [curses=false])
+AC_ARG_ENABLE([monitor_code], 
+	[AS_HELP_STRING([--enable-monitor-code], [Add monitor example code to the build])],
+  [AS_IF([test "x$enable_monitor_code" = "xyes"], [monitor_code=true], [monitor_code=false])],
+  [monitor_code=false]
+)
+AM_CONDITIONAL(MONITOR, test "$monitor_code" = true)
+
+dnl Install test binaries
+AC_ARG_ENABLE([install_tests],
+  [AS_HELP_STRING([--enable-install-tests], [include test binaries in installation])],
+  [AS_IF([test "x$enable_install_tests" = "xyes"], [install_tests=true], [install_tests=false])],
+  [install_tests=false]
+)
+
+AM_CONDITIONAL(INSTALL_TESTS, test "$install_tests" = true)
+
+dnl Checks for header files.
+dnl We do this in multiple stages, because unlike Linux all the other operating systems really suck and don't include their own dependencies.
+
+AC_CHECK_HEADERS([syslog.h sys/file.h sys/param.h sys/resource.h sys/socket.h sys/time.h sys/un.h sys/wait.h netdb.h arpa/inet.h dirent.h curses.h ifaddrs.h stdatomic.h])
+
+dnl Checks for typedefs, structures, and compiler characteristics.
+MeshLink_ATTRIBUTE(__malloc__)
+MeshLink_ATTRIBUTE(__warn_unused_result__)
+
+dnl Checks for library functions.
+AC_CHECK_FUNCS([asprintf fchmod fork gettimeofday random pselect select setns strdup usleep getifaddrs freeifaddrs],
+  [], [], [#include "$srcdir/src/have.h"]
+)
+
+dnl Support for SunOS
+
+AC_CHECK_FUNC(socket, [], [
+  AC_CHECK_LIB(socket, connect)
+])
+
+AC_CACHE_SAVE
+
+AC_CONFIG_FILES([
+	 Makefile
+	 src/Makefile
+	 test/Makefile
+	 test/blackbox/Makefile
+	 test/blackbox/run_blackbox_tests/Makefile
+	 test/blackbox/test_case_channel_conn_01/Makefile
+	 test/blackbox/test_case_channel_conn_02/Makefile
+	 test/blackbox/test_case_channel_conn_03/Makefile
+	 test/blackbox/test_case_channel_conn_04/Makefile
+	 test/blackbox/test_case_channel_conn_05/Makefile
+	 test/blackbox/test_case_channel_conn_06/Makefile
+	 test/blackbox/test_case_channel_conn_07/Makefile
+	 test/blackbox/test_case_channel_conn_08/Makefile
+	 test/blackbox/test_case_meta_conn_01/Makefile
+	 test/blackbox/test_case_meta_conn_02/Makefile
+	 test/blackbox/test_case_meta_conn_03/Makefile
+	 test/blackbox/test_case_meta_conn_04/Makefile
+	 test/blackbox/test_case_meta_conn_05/Makefile
+	 test/blackbox/test_cases_submesh01/Makefile
+	 test/blackbox/test_cases_submesh02/Makefile
+	 test/blackbox/test_cases_submesh03/Makefile
+	 test/blackbox/test_cases_submesh04/Makefile
+	 examples/Makefile
+])
+
+AC_OUTPUT

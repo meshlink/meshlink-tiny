@@ -1,0 +1,6 @@
+
+The libmeshlink.so library is compiled and you will find it in ./src/.libs/
+
+You can make your tests using this command
+
+export LD_LIBRARY_PATH='/home/saverio/SORGENTI/meshlink/src/.libs/'
