@@ -1974,22 +1974,6 @@ void meshlink_set_error_cb(struct meshlink_handle *mesh, meshlink_error_cb_t cb)
 	pthread_mutex_unlock(&mesh->mutex);
 }
 
-void meshlink_set_blacklisted_cb(struct meshlink_handle *mesh, meshlink_blacklisted_cb_t cb) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_set_blacklisted_cb(%p)", (void *)(intptr_t)cb);
-
-	if(!mesh) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	mesh->blacklisted_cb = cb;
-	pthread_mutex_unlock(&mesh->mutex);
-}
-
 static bool prepare_packet(meshlink_handle_t *mesh, meshlink_node_t *destination, const void *data, size_t len, vpn_packet_t *packet) {
 	meshlink_packethdr_t *hdr;
 
@@ -2292,10 +2276,6 @@ static bool search_node_by_dev_class(const node_t *node, const void *condition) 
 	return false;
 }
 
-static bool search_node_by_blacklisted(const node_t *node, const void *condition) {
-	return *(bool *)condition == node->status.blacklisted;
-}
-
 static bool search_node_by_submesh(const node_t *node, const void *condition) {
 	if(condition == node->submesh) {
 		return true;
@@ -2358,15 +2338,6 @@ meshlink_node_t **meshlink_get_all_nodes_by_last_reachable(meshlink_handle_t *me
 	return meshlink_get_all_nodes_by_condition(mesh, &range, nodes, nmemb, search_node_by_last_reachable);
 }
 
-meshlink_node_t **meshlink_get_all_nodes_by_blacklisted(meshlink_handle_t *mesh, bool blacklisted, meshlink_node_t **nodes, size_t *nmemb) {
-	if(!mesh || !nmemb) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return NULL;
-	}
-
-	return meshlink_get_all_nodes_by_condition(mesh, &blacklisted, nodes, nmemb, search_node_by_blacklisted);
-}
-
 dev_class_t meshlink_get_node_dev_class(meshlink_handle_t *mesh, meshlink_node_t *node) {
 	if(!mesh || !node) {
 		meshlink_errno = MESHLINK_EINVAL;
@@ -2384,28 +2355,6 @@ dev_class_t meshlink_get_node_dev_class(meshlink_handle_t *mesh, meshlink_node_t
 	pthread_mutex_unlock(&mesh->mutex);
 
 	return devclass;
-}
-
-bool meshlink_get_node_blacklisted(meshlink_handle_t *mesh, meshlink_node_t *node) {
-	if(!mesh) {
-		meshlink_errno = MESHLINK_EINVAL;
-	}
-
-	if(!node) {
-		return mesh->default_blacklist;
-	}
-
-	bool blacklisted;
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	blacklisted = ((node_t *)node)->status.blacklisted;
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	return blacklisted;
 }
 
 meshlink_submesh_t *meshlink_get_node_submesh(meshlink_handle_t *mesh, meshlink_node_t *node) {
@@ -3154,189 +3103,6 @@ bool meshlink_import(meshlink_handle_t *mesh, const char *data) {
 	}
 
 	return true;
-}
-
-static bool blacklist(meshlink_handle_t *mesh, node_t *n) {
-	if(n == mesh->self) {
-		logger(mesh, MESHLINK_ERROR, "%s blacklisting itself?\n", n->name);
-		meshlink_errno = MESHLINK_EINVAL;
-		return false;
-	}
-
-	if(n->status.blacklisted) {
-		logger(mesh, MESHLINK_DEBUG, "Node %s already blacklisted\n", n->name);
-		return true;
-	}
-
-	n->status.blacklisted = true;
-
-	/* Immediately shut down any connections we have with the blacklisted node.
-	 * We can't call terminate_connection(), because we might be called from a callback function.
-	 */
-	for list_each(connection_t, c, mesh->connections) {
-		if(c->node == n) {
-			if(c->status.active) {
-				send_error(mesh, c, BLACKLISTED, "blacklisted");
-			}
-
-			shutdown(c->socket, SHUT_RDWR);
-		}
-	}
-
-	utcp_reset_all_connections(n->utcp);
-
-	n->mtu = 0;
-	n->minmtu = 0;
-	n->maxmtu = MTU;
-	n->mtuprobes = 0;
-	n->status.udp_confirmed = false;
-
-	if(n->status.reachable) {
-		n->last_unreachable = time(NULL);
-	}
-
-	/* Graph updates will suppress status updates for blacklisted nodes, so we need to
-	 * manually call the status callback if necessary.
-	 */
-	if(n->status.reachable && mesh->node_status_cb) {
-		mesh->node_status_cb(mesh, (meshlink_node_t *)n, false);
-	}
-
-	return node_write_config(mesh, n, true) && config_sync(mesh, "current");
-}
-
-bool meshlink_blacklist(meshlink_handle_t *mesh, meshlink_node_t *node) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_blacklist(%s)", node ? node->name : "(null)");
-
-	if(!mesh || !node) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return false;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	if(!blacklist(mesh, (node_t *)node)) {
-		pthread_mutex_unlock(&mesh->mutex);
-		return false;
-	}
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	logger(mesh, MESHLINK_DEBUG, "Blacklisted %s.\n", node->name);
-	return true;
-}
-
-bool meshlink_blacklist_by_name(meshlink_handle_t *mesh, const char *name) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_blacklist_by_name(%s)", name ? name : "(null)");
-
-	if(!mesh || !name) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return false;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	node_t *n = lookup_node(mesh, (char *)name);
-
-	if(!n) {
-		n = new_node();
-		n->name = xstrdup(name);
-		node_add(mesh, n);
-	}
-
-	if(!blacklist(mesh, (node_t *)n)) {
-		pthread_mutex_unlock(&mesh->mutex);
-		return false;
-	}
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	logger(mesh, MESHLINK_DEBUG, "Blacklisted %s.\n", name);
-	return true;
-}
-
-static bool whitelist(meshlink_handle_t *mesh, node_t *n) {
-	if(n == mesh->self) {
-		logger(mesh, MESHLINK_ERROR, "%s whitelisting itself?\n", n->name);
-		meshlink_errno = MESHLINK_EINVAL;
-		return false;
-	}
-
-	if(!n->status.blacklisted) {
-		logger(mesh, MESHLINK_DEBUG, "Node %s was already whitelisted\n", n->name);
-		return true;
-	}
-
-	n->status.blacklisted = false;
-
-	if(n->status.reachable) {
-		n->last_reachable = time(NULL);
-		update_node_status(mesh, n);
-	}
-
-	return node_write_config(mesh, n, true) && config_sync(mesh, "current");
-}
-
-bool meshlink_whitelist(meshlink_handle_t *mesh, meshlink_node_t *node) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_whitelist(%s)", node ? node->name : "(null)");
-
-	if(!mesh || !node) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return false;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	if(!whitelist(mesh, (node_t *)node)) {
-		pthread_mutex_unlock(&mesh->mutex);
-		return false;
-	}
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	logger(mesh, MESHLINK_DEBUG, "Whitelisted %s.\n", node->name);
-	return true;
-}
-
-bool meshlink_whitelist_by_name(meshlink_handle_t *mesh, const char *name) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_whitelist_by_name(%s)", name ? name : "(null)");
-
-	if(!mesh || !name) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return false;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	node_t *n = lookup_node(mesh, (char *)name);
-
-	if(!n) {
-		n = new_node();
-		n->name = xstrdup(name);
-		node_add(mesh, n);
-	}
-
-	if(!whitelist(mesh, (node_t *)n)) {
-		pthread_mutex_unlock(&mesh->mutex);
-		return false;
-	}
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	logger(mesh, MESHLINK_DEBUG, "Whitelisted %s.\n", name);
-	return true;
-}
-
-void meshlink_set_default_blacklist(meshlink_handle_t *mesh, bool blacklist) {
-	mesh->default_blacklist = blacklist;
 }
 
 bool meshlink_forget_node(meshlink_handle_t *mesh, meshlink_node_t *node) {

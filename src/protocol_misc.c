@@ -70,13 +70,6 @@ bool error_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 
 	logger(mesh, MESHLINK_INFO, "Error message from %s: %d: %s", c->name, err, errorstring);
 
-	switch(err) {
-	case BLACKLISTED:
-		if(mesh->blacklisted_cb) {
-			mesh->blacklisted_cb(mesh, (meshlink_node_t *)lookup_node(mesh, c->name));
-		}
-	}
-
 	return false;
 }
 

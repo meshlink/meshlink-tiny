@@ -1,7 +1,6 @@
 TESTS = \
 	basic \
 	basicpp \
-	blacklist \
 	channels \
 	channels-aio \
 	channels-aio-abort \
@@ -43,7 +42,6 @@ check_PROGRAMS = \
 	api_set_node_status_cb \
 	basic \
 	basicpp \
-	blacklist \
 	channels \
 	channels-aio \
 	channels-aio-abort \
@@ -81,9 +79,6 @@ basic_LDADD = $(top_builddir)/src/libmeshlink.la
 
 basicpp_SOURCES = basicpp.cpp utils.c utils.h
 basicpp_LDADD = $(top_builddir)/src/libmeshlink.la
-
-blacklist_SOURCES = blacklist.c utils.c utils.h
-blacklist_LDADD = $(top_builddir)/src/libmeshlink.la
 
 channels_SOURCES = channels.c utils.c utils.h
 channels_LDADD = $(top_builddir)/src/libmeshlink.la

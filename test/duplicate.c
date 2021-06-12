@@ -15,7 +15,6 @@ static struct sync_flag duplicate_detected;
 
 static void handle_duplicate(meshlink_handle_t *mesh, meshlink_node_t *node) {
 	set_sync_flag(&duplicate_detected, true);
-	assert(meshlink_blacklist(mesh, node));
 }
 
 int main(void) {

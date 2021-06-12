@@ -274,12 +274,6 @@ public:
 		(void)meshlink_errno;
 	}
 
-	/// This functions is called whenever MeshLink is blacklisted by another node.
-	virtual void blacklisted(node *peer) {
-		/* do nothing */
-		(void)peer;
-	}
-
 	/// This functions is called whenever MeshLink a meta-connection attempt is made.
 	virtual void connection_try(node *peer) {
 		/* do nothing */
@@ -380,7 +374,6 @@ public:
 		meshlink_set_node_duplicate_cb(handle, &node_duplicate_trampoline);
 		meshlink_set_log_cb(handle, MESHLINK_DEBUG, &log_trampoline);
 		meshlink_set_error_cb(handle, &error_trampoline);
-		meshlink_set_blacklisted_cb(handle, &blacklisted_trampoline);
 		meshlink_set_channel_listen_cb(handle, &channel_listen_trampoline);
 		meshlink_set_channel_accept_cb(handle, &channel_accept_trampoline);
 		meshlink_set_connection_try_cb(handle, &connection_try_trampoline);
@@ -438,17 +431,6 @@ public:
 		return meshlink_get_node_reachability(handle, node, last_reachable, last_unreachable);
 	}
 
-	/// Get a node's blacklist status.
-	/** This function returns the current blacklist status of a given node.
-	 *
-	 *  @param node              A pointer to a meshlink::node describing the node.
-	 *
-	 *  @return                  This function returns true if the node is currently blacklisted, false otherwise.
-	 */
-	bool get_node_blacklisted(node *node) {
-		return meshlink_get_node_blacklisted(handle, node);
-	}
-
 	/// Get a handle for a specific submesh.
 	/** This function returns a handle for the submesh with the given name.
 	 *
@@ -481,22 +463,6 @@ public:
 	 */
 	node **get_all_nodes(node **nodes, size_t *nmemb) {
 		return (node **)meshlink_get_all_nodes(handle, (meshlink_node_t **)nodes, nmemb);
-	}
-
-	/// Get a list of all nodes by blacklist status.
-	/** This function returns a list with handles for all the nodes who were either blacklisted or whitelisted.
-	 *
-	 *  @param blacklisted  If true, a list of blacklisted nodes will be returned, otherwise whitelisted nodes.
-	 *  @param nodes        A pointer to an array of pointers to meshlink::node, which should be allocated by the application.
-	 *  @param nmemb        The maximum number of pointers that can be stored in the nodes array.
-	 *
-	 *  @return             A pointer to an array containing pointers to all known nodes with the given blacklist status.
-	 *                      If the @a nodes argument was not NULL, then the return value can either be the same value or a different value.
-	 *                      If it is a new value, the old value of @a nodes should not be used anymore.
-	 *                      If the new value is NULL, then the old array will have been freed by MeshLink.
-	 */
-	node **get_all_nodes_by_blacklisted(bool blacklisted, node **nodes, size_t *nmemb) {
-		return (node **)meshlink_get_all_nodes_by_blacklisted(handle, blacklisted, (meshlink_node_t **)nodes, nmemb);
 	}
 
 	/// Sign data using the local node's MeshLink key.
@@ -677,7 +643,7 @@ public:
 	/** This sets the policy MeshLink uses when it has new information about nodes.
 	 *  By default, all udpates will be stored to disk (unless an ephemeral instance has been opened).
 	 *  Setting the policy to MESHLINK_STORAGE_KEYS_ONLY, only updates that contain new keys for nodes
-	 *  are stored, as well as blacklist/whitelist settings.
+	 *  are stored.
 	 *  By setting the policy to MESHLINK_STORAGE_DISABLED, no updates will be stored.
 	 *
 	 *  @param policy  The storage policy to use.
@@ -750,64 +716,6 @@ public:
 	 */
 	bool forget_node(node *node) {
 		return meshlink_forget_node(handle, node);
-	}
-
-	/// Blacklist a node from the mesh.
-	/** This function causes the local node to blacklist another node.
-	 *  The local node will drop any existing connections to that node,
-	 *  and will not send data to it nor accept any data received from it any more.
-	 *
-	 *  @param node         A pointer to a meshlink::node describing the node to be blacklisted.
-	 *
-	 *  @return             This function returns true if the node has been whitelisted, false otherwise.
-	 */
-	bool blacklist(node *node) {
-		return meshlink_blacklist(handle, node);
-	}
-
-	/// Blacklist a node from the mesh by name.
-	/** This function causes the local node to blacklist another node by name.
-	 *  The local node will drop any existing connections to that node,
-	 *  and will not send data to it nor accept any data received from it any more.
-	 *
-	 *  If no node by the given name is known, it is created.
-	 *
-	 *  @param name         The name of the node to blacklist.
-	 *
-	 *  @return             This function returns true if the node has been blacklisted, false otherwise.
-	 */
-	bool blacklist_by_name(const char *name) {
-		return meshlink_blacklist_by_name(handle, name);
-	}
-
-	/// Whitelist a node on the mesh.
-	/** This function causes the local node to whitelist another node.
-	 *  The local node will allow connections to and from that node,
-	 *  and will send data to it and accept any data received from it.
-	 *
-	 *  @param node         A pointer to a meshlink::node describing the node to be whitelisted.
-	 *
-	 *  @return             This function returns true if the node has been whitelisted, false otherwise.
-	 */
-	bool whitelist(node *node) {
-		return meshlink_whitelist(handle, node);
-	}
-
-	/// Whitelist a node on the mesh by name.
-	/** This function causes the local node to whitelist a node by name.
-	 *  The local node will allow connections to and from that node,
-	 *  and will send data to it and accept any data received from it.
-	 *
-	 *  If no node by the given name is known, it is created.
-	 *  This is useful if new nodes are blacklisted by default.
-	 *
-	 *  \memberof meshlink_node
-	 *  @param name         The name of the node to whitelist.
-	 *
-	 *  @return             This function returns true if the node has been whitelisted, false otherwise.
-	 */
-	bool whitelist_by_name(const char *name) {
-		return meshlink_whitelist_by_name(handle, name);
 	}
 
 	/// Set the poll callback.
@@ -1241,15 +1149,6 @@ private:
 
 		meshlink::mesh *that = static_cast<mesh *>(handle->priv);
 		that->error(meshlink_errno);
-	}
-
-	static void blacklisted_trampoline(meshlink_handle_t *handle, meshlink_node_t *peer) {
-		if(!(handle->priv)) {
-			return;
-		}
-
-		meshlink::mesh *that = static_cast<mesh *>(handle->priv);
-		that->blacklisted(static_cast<node *>(peer));
 	}
 
 	static void connection_try_trampoline(meshlink_handle_t *handle, meshlink_node_t *peer) {

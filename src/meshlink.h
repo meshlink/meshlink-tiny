@@ -590,27 +590,6 @@ typedef void (*meshlink_error_cb_t)(struct meshlink_handle *mesh, meshlink_errno
  */
 void meshlink_set_error_cb(struct meshlink_handle *mesh, meshlink_error_cb_t cb);
 
-/// A callback for receiving blacklisted conditions encountered by the MeshLink thread.
-/** @param mesh      A handle which represents an instance of MeshLink, or NULL.
- *  @param node      The node that blacklisted the local node.
- */
-typedef void (*meshlink_blacklisted_cb_t)(struct meshlink_handle *mesh, struct meshlink_node *node);
-
-/// Set the blacklisted callback.
-/** This functions sets the callback that is called whenever MeshLink detects that it is blacklisted by another node.
- *
- *  The callback is run in MeshLink's own thread.
- *  It is important that the callback uses apprioriate methods (queues, pipes, locking, etc.)
- *  to hand the data over to the application's thread.
- *  The callback should also not block itself and return as quickly as possible.
- *
- *  \memberof meshlink_handle
- *  @param mesh      A handle which represents an instance of MeshLink, or NULL.
- *  @param cb        A pointer to the function which will be called when a serious error is encountered.
- *                   If a NULL pointer is given, the callback will be disabled.
- */
-void meshlink_set_blacklisted_cb(struct meshlink_handle *mesh, meshlink_blacklisted_cb_t cb);
-
 /// Send data to another node.
 /** This functions sends one packet of data to another node in the mesh.
  *  The packet is sent using UDP semantics, which means that
@@ -803,27 +782,6 @@ struct meshlink_node **meshlink_get_all_nodes_by_submesh(struct meshlink_handle 
  */
 struct meshlink_node **meshlink_get_all_nodes_by_last_reachable(struct meshlink_handle *mesh, time_t start, time_t end, struct meshlink_node **nodes, size_t *nmemb) __attribute__((__warn_unused_result__));
 
-/// Get the list of all nodes by blacklist status.
-/** This function returns a list with handles for all the nodes who were either blacklisted or whitelisted.
- *
- *  \memberof meshlink_handle
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param blacklisted  If true, a list of blacklisted nodes will be returned, otherwise whitelisted nodes.
- *  @param nodes        A pointer to a previously allocated array of pointers to struct meshlink_node, or NULL in which case MeshLink will allocate a new array.
- *                      The application can supply an array it allocated itself with malloc, or the return value from the previous call to this function (which is the preferred way).
- *                      The application is allowed to call free() on the array whenever it wishes.
- *                      The pointers in the array are valid until meshlink_close() is called.
- *  @param nmemb        A pointer to a variable holding the number of nodes that were reachable within the period given by @a start and @a end.
- *                      In case the @a nodes argument is not NULL, MeshLink might call realloc() on the array to change its size.
- *                      The contents of this variable will be changed to reflect the new size of the array.
- *
- *  @return             A pointer to an array containing pointers to all known nodes with the given blacklist status.
- *                      If the @a nodes argument was not NULL, then the return value can either be the same value or a different value.
- *                      If it is a new value, the old value of @a nodes should not be used anymore.
- *                      If the new value is NULL, then the old array will have been freed by MeshLink.
- */
-struct meshlink_node **meshlink_get_all_nodes_by_blacklisted(struct meshlink_handle *mesh, bool blacklisted, struct meshlink_node **nodes, size_t *nmemb) __attribute__((__warn_unused_result__));
-
 /// Get the node's device class.
 /** This function returns the device class of the given node.
  *
@@ -834,17 +792,6 @@ struct meshlink_node **meshlink_get_all_nodes_by_blacklisted(struct meshlink_han
  *  @return              This function returns the device class of the @a node, or -1 in case of an error.
  */
 dev_class_t meshlink_get_node_dev_class(struct meshlink_handle *mesh, struct meshlink_node *node) __attribute__((__warn_unused_result__));
-
-/// Get the node's blacklist status.
-/** This function returns the given node is blacklisted.
- *
- *  \memberof meshlink_node
- *  @param mesh          A handle which represents an instance of MeshLink.
- *  @param node          A pointer to a struct meshlink_node describing the node.
- *
- *  @return              This function returns true if the node is blacklisted, false otherwise.
- */
-bool meshlink_get_node_blacklisted(struct meshlink_handle *mesh, struct meshlink_node *node) __attribute__((__warn_unused_result__));
 
 /// Get the node's submesh handle.
 /** This function returns the submesh handle of the given node.
@@ -1128,76 +1075,6 @@ bool meshlink_import(struct meshlink_handle *mesh, const char *data) __attribute
  *  @return             This function returns true if all currently known data about the node has been forgotten, false otherwise.
  */
 bool meshlink_forget_node(struct meshlink_handle *mesh, struct meshlink_node *node);
-
-/// Blacklist a node from the mesh.
-/** This function causes the local node to blacklist another node.
- *  The local node will drop any existing connections to that node,
- *  and will not send data to it nor accept any data received from it any more.
- *
- *  \memberof meshlink_node
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param node         A pointer to a struct meshlink_node describing the node to be blacklisted.
- *
- *  @return             This function returns true if the node has been blacklisted, false otherwise.
- */
-bool meshlink_blacklist(struct meshlink_handle *mesh, struct meshlink_node *node) __attribute__((__warn_unused_result__));
-
-/// Blacklist a node from the mesh by name.
-/** This function causes the local node to blacklist another node by name.
- *  The local node will drop any existing connections to that node,
- *  and will not send data to it nor accept any data received from it any more.
- *
- *  If no node by the given name is known, it is created.
- *
- *  \memberof meshlink_node
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param name         The name of the node to blacklist.
- *
- *  @return             This function returns true if the node has been blacklisted, false otherwise.
- */
-bool meshlink_blacklist_by_name(struct meshlink_handle *mesh, const char *name) __attribute__((__warn_unused_result__));
-
-/// Whitelist a node on the mesh.
-/** This function causes the local node to whitelist a previously blacklisted node.
- *  The local node will allow connections to and from that node,
- *  and will send data to it and accept any data received from it.
- *
- *  \memberof meshlink_node
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param node         A pointer to a struct meshlink_node describing the node to be whitelisted.
- *
- *  @return             This function returns true if the node has been whitelisted, false otherwise.
- */
-bool meshlink_whitelist(struct meshlink_handle *mesh, struct meshlink_node *node) __attribute__((__warn_unused_result__));
-
-/// Whitelist a node on the mesh by name.
-/** This function causes the local node to whitelist a node by name.
- *  The local node will allow connections to and from that node,
- *  and will send data to it and accept any data received from it.
- *
- *  If no node by the given name is known, it is created.
- *  This is useful if new nodes are blacklisted by default.
- *
- *  \memberof meshlink_node
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param name         The name of the node to whitelist.
- *
- *  @return             This function returns true if the node has been whitelisted, false otherwise.
- */
-bool meshlink_whitelist_by_name(struct meshlink_handle *mesh, const char *name) __attribute__((__warn_unused_result__));
-
-/// Set whether new nodes are blacklisted by default.
-/** This function sets the blacklist behaviour for newly discovered nodes.
- *  If set to true, new nodes will be automatically blacklisted.
- *  If set to false, which is the default, new nodes are automatically whitelisted.
- *  The whitelist/blacklist status of a node may be changed afterwards with the
- *  meshlink_whitelist() and meshlink_blacklist() functions.
- *
- *  \memberof meshlink_handle
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param blacklist    True if new nodes are to be blacklisted, false if whitelisted.
- */
-void meshlink_set_default_blacklist(struct meshlink_handle *mesh, bool blacklist);
 
 /// A callback for listening for incoming channels.
 /** This function is called whenever a remote node wants to open a channel to the local node.
@@ -1780,7 +1657,7 @@ void meshlink_set_scheduling_granularity(struct meshlink_handle *mesh, long gran
 /** This sets the policy MeshLink uses when it has new information about nodes.
  *  By default, all udpates will be stored to disk (unless an ephemeral instance has been opened).
  *  Setting the policy to MESHLINK_STORAGE_KEYS_ONLY, only updates that contain new keys for nodes
- *  are stored, as well as blacklist/whitelist settings.
+ *  are stored.
  *  By setting the policy to MESHLINK_STORAGE_DISABLED, no updates will be stored.
  *
  *  \memberof meshlink_handle

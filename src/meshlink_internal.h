@@ -139,7 +139,6 @@ struct meshlink_handle {
 	meshlink_node_duplicate_cb_t node_duplicate_cb;
 	meshlink_connection_try_cb_t connection_try_cb;
 	meshlink_error_cb_t error_cb;
-	meshlink_blacklisted_cb_t blacklisted_cb;
 
 	// Mesh parameters
 	char *appname;
@@ -155,7 +154,6 @@ struct meshlink_handle {
 
 	int netns;
 
-	bool default_blacklist;
 	bool inviter_commits_first;
 
 	// Configuration

@@ -10,8 +10,6 @@ devtool_set_inviter_commits_first
 devtool_trybind_probe
 meshlink_add_address
 meshlink_add_external_address
-meshlink_blacklist
-meshlink_blacklist_by_name
 meshlink_channel_abort
 meshlink_channel_aio_fd_receive
 meshlink_channel_aio_fd_send
@@ -36,7 +34,6 @@ meshlink_errno
 meshlink_export
 meshlink_forget_node
 meshlink_get_all_nodes
-meshlink_get_all_nodes_by_blacklisted
 meshlink_get_all_nodes_by_dev_class
 meshlink_get_all_nodes_by_last_reachable
 meshlink_get_all_nodes_by_submesh
@@ -45,7 +42,6 @@ meshlink_get_external_address_for_family
 meshlink_get_fingerprint
 meshlink_get_local_address_for_family
 meshlink_get_node
-meshlink_get_node_blacklisted
 meshlink_get_node_dev_class
 meshlink_get_node_reachability
 meshlink_get_node_submesh
@@ -70,7 +66,6 @@ meshlink_open_params_set_storage_key
 meshlink_open_params_set_storage_policy
 meshlink_reset_timers
 meshlink_send
-meshlink_set_blacklisted_cb
 meshlink_set_canonical_address
 meshlink_set_channel_accept_cb
 meshlink_set_channel_flags
@@ -82,7 +77,6 @@ meshlink_set_channel_receive_cb
 meshlink_set_channel_sndbuf
 meshlink_set_channel_sndbuf_storage
 meshlink_set_connection_try_cb
-meshlink_set_default_blacklist
 meshlink_set_dev_class_fast_retry_period
 meshlink_set_dev_class_maxtimeout
 meshlink_set_dev_class_timeouts
@@ -104,5 +98,3 @@ meshlink_set_storage_policy
 meshlink_strerror
 meshlink_submesh_open
 meshlink_verify
-meshlink_whitelist
-meshlink_whitelist_by_name
