@@ -1,7 +1,7 @@
-This is the README file for the MeshLink library. Installation instructions may
+This is the README file for the MeshLink-tiny library. Installation instructions may
 be found in the INSTALL file.
 
-MeshLink is Copyright (C) 2014-2018 Guus Sliepen <guus@meshlink.io>
+MeshLink is Copyright (C) 2014-2021 Guus Sliepen <guus@meshlink.io>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -11,21 +11,13 @@ your option) any later version. See the file COPYING for more details.
 To obtain a license to use this library in commercial software, please contact
 sales@meshlink.io.
 
-
-This is not a finished version
-------------------------------
-
-Please do not use this library yet.
-
-
-Requirements
-------------
-
-In order to compile MeshLink, you will need a GNU C compiler environment.
-
-
 Features
 --------
+
+MeshLink-tiny is a version of the MeshLink library optimized for devices with
+very little resources. In particular, it tries to reduce code size and memory
+usage, while keeping as much the API and network protocol compatible with the
+full MeshLink library as much as possible.
 
 MeshLink is a library that allows applications to connect to other instances of
 itself, and exchange messages in a secure way. MeshLink provides end-to-end

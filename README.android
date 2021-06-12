@@ -8,8 +8,8 @@
 
 - Clone and cross-compile MeshLink:
 
-        git clone git://meshlink.io/meshlink
-        cd meshlink
+        git clone git://meshlink.io/meshlink-tiny
+        cd meshlink-tiny
         autoreconf -fsi
         CC=/tmp/my-android-toolchain/bin/arm-linux-androideabi-gcc CXX=/tmp/my-android-toolchain/bin/arm-linux-androideabi-g++ ./configure --host=arm-linux-androideabi
         make -j$(nproc)
