@@ -5,7 +5,7 @@
 #include <cassert>
 #include <dirent.h>
 
-#include "meshlink++.h"
+#include "meshlink-tiny++.h"
 
 using namespace std;
 

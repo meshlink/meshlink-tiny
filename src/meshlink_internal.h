@@ -21,14 +21,14 @@
 */
 
 #ifdef MESHLINK_H
-#error You must not include both meshlink.h and meshlink_internal.h!
+#error You must not include both meshlink-tiny.h and meshlink_internal.h!
 #endif
 
 #include "system.h"
 
 #include "event.h"
 #include "hash.h"
-#include "meshlink.h"
+#include "meshlink-tiny.h"
 #include "meshlink_queue.h"
 #include "sockaddr.h"
 #include "sptps.h"

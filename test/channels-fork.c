@@ -18,7 +18,7 @@
 #endif
 
 #include "utils.h"
-#include "../src/meshlink.h"
+#include "../src/meshlink-tiny.h"
 
 static struct sync_flag bar_responded;
 static struct sync_flag foo_connected;

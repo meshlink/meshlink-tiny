@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "meshlink.h"
+#include "meshlink-tiny.h"
 #include "devtools.h"
 #include "netns_utils.h"
 #include "utils.h"

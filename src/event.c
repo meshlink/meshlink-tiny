@@ -22,7 +22,7 @@
 #include "dropin.h"
 #include "event.h"
 #include "logger.h"
-#include "meshlink.h"
+#include "meshlink-tiny.h"
 #include "net.h"
 #include "splay_tree.h"
 #include "utils.h"

@@ -10,7 +10,7 @@
 #include <assert.h>
 #include <errno.h>
 
-#include "meshlink.h"
+#include "meshlink-tiny.h"
 #include "devtools.h"
 #include "utils.h"
 

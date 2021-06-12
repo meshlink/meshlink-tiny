@@ -10,7 +10,7 @@
 #include <assert.h>
 
 #include "utils.h"
-#include "../src/meshlink.h"
+#include "../src/meshlink-tiny.h"
 
 static struct sync_flag b_responded;
 static struct sync_flag aio_finished;

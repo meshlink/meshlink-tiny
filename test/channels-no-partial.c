@@ -9,7 +9,7 @@
 #include <string.h>
 #include <sys/time.h>
 
-#include "meshlink.h"
+#include "meshlink-tiny.h"
 #include "utils.h"
 
 static bool accept_cb(meshlink_handle_t *mesh, meshlink_channel_t *channel, uint16_t port, const void *data, size_t len) {

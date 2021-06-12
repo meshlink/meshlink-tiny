@@ -9,7 +9,7 @@
 #include <string.h>
 #include <sys/time.h>
 
-#include "meshlink.h"
+#include "meshlink-tiny.h"
 #include "utils.h"
 
 static const size_t size = 12000000; // size of data to transfer

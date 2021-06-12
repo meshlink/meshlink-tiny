@@ -12,7 +12,7 @@
 #include <assert.h>
 #include <sys/time.h>
 
-#include "meshlink.h"
+#include "meshlink-tiny.h"
 #include "devtools.h"
 #include "utils.h"
 

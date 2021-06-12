@@ -3,7 +3,7 @@
 #include <string.h>
 #include <strings.h>
 
-#include "../src/meshlink.h"
+#include "../src/meshlink-tiny.h"
 #include "../src/devtools.h"
 
 #define CHAT_PORT 531

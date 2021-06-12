@@ -13,7 +13,7 @@
 #include <sys/time.h>
 #include <dirent.h>
 
-#include "meshlink.h"
+#include "meshlink-tiny.h"
 #include "devtools.h"
 #include "utils.h"
 

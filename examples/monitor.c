@@ -8,7 +8,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-#include "../src/meshlink.h"
+#include "../src/meshlink-tiny.h"
 #include "../src/devtools.h"
 
 static WINDOW *topwin;

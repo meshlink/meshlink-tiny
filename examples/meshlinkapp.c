@@ -1,6 +1,6 @@
 #include "../src/logger.h"
 #include "../src/system.h"
-#include "../src/meshlink.h"
+#include "../src/meshlink-tiny.h"
 
 static void handle_recv_data(meshlink_handle_t *mesh, meshlink_node_t *source, void *data, size_t len) {
 	(void)mesh;

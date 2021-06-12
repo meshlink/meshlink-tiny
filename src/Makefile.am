@@ -29,14 +29,14 @@ utcp_SOURCES = \
 	utcp.c utcp.h \
 	utcp_priv.h
 
-lib_LTLIBRARIES = libmeshlink.la
+lib_LTLIBRARIES = libmeshlink-tiny.la
 EXTRA_PROGRAMS = utcp-test
 
-pkginclude_HEADERS = meshlink++.h meshlink.h
+pkginclude_HEADERS = meshlink-tiny++.h meshlink-tiny.h
 
-libmeshlink_la_LDFLAGS = -export-symbols $(srcdir)/meshlink.sym
+libmeshlink_tiny_la_LDFLAGS = -export-symbols $(srcdir)/meshlink.sym
 
-libmeshlink_la_SOURCES = \
+libmeshlink_tiny_la_SOURCES = \
 	adns.c adns.h \
 	buffer.c buffer.h \
 	conf.c conf.h \
@@ -55,7 +55,7 @@ libmeshlink_la_SOURCES = \
 	list.c list.h \
 	logger.c logger.h \
 	mdns.c mdns.h \
-	meshlink.c meshlink.h meshlink.sym \
+	meshlink.c meshlink-tiny.h meshlink.sym \
 	meshlink_internal.h \
 	meshlink_queue.h \
 	meta.c meta.h \
@@ -90,10 +90,10 @@ utcp_test_SOURCES = \
 	utcp-test.c \
 	$(utcp_SOURCES)
 
-EXTRA_libmeshlink_la_DEPENDENCIES = $(srcdir)/meshlink.sym
+EXTRA_libmeshlink_tiny_la_DEPENDENCIES = $(srcdir)/meshlink.sym
 
-libmeshlink_la_CFLAGS = $(PTHREAD_CFLAGS) -fPIC -iquote.
-libmeshlink_la_LDFLAGS += $(PTHREAD_LIBS)
+libmeshlink_tiny_la_CFLAGS = $(PTHREAD_CFLAGS) -fPIC -iquote.
+libmeshlink_tiny_la_LDFLAGS += $(PTHREAD_LIBS)
 
 utcp_test_CFLAGS = $(PTHREAD_CFLAGS) -iquote.
 utcp_test_LDFLAGS = $(PTHREAD_LIBS)

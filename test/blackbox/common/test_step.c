@@ -25,7 +25,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
-#include "../../../src/meshlink.h"
+#include "../../../src/meshlink-tiny.h"
 #include "test_step.h"
 #include "common_handlers.h"
 

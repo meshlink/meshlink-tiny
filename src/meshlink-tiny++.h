@@ -2,7 +2,7 @@
 #define MESHLINKPP_H
 
 /*
-    meshlink++.h -- MeshLink C++ API
+    meshlink-tiny++.h -- MeshLink C++ API
     Copyright (C) 2014, 2017 Guus Sliepen <guus@meshlink.io>
 
     This program is free software; you can redistribute it and/or modify
@@ -20,7 +20,7 @@
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 */
 
-#include <meshlink.h>
+#include <meshlink-tiny.h>
 #include <new> // for 'placement new'
 
 namespace meshlink {

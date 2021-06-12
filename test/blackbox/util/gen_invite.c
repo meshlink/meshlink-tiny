@@ -24,7 +24,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
-#include "../../../src/meshlink.h"
+#include "../../../src/meshlink-tiny.h"
 #include "../common/test_step.h"
 
 #define CMD_LINE_ARG_NODENAME   1

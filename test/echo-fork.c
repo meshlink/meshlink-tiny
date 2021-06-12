@@ -17,7 +17,7 @@
 #include <sys/prctl.h>
 #endif
 
-#include "meshlink.h"
+#include "meshlink-tiny.h"
 #include "utils.h"
 
 /*

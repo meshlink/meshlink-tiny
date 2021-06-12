@@ -10,7 +10,7 @@
 #include <time.h>
 #include <assert.h>
 
-#include "meshlink.h"
+#include "meshlink-tiny.h"
 #include "utils.h"
 
 static struct sync_flag bar_reachable;

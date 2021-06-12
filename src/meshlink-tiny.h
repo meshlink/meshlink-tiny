@@ -2,7 +2,7 @@
 #define MESHLINK_H
 
 /*
-    meshlink.h -- MeshLink API
+    meshlink-tiny.h -- MeshLink API
     Copyright (C) 2014-2021 Guus Sliepen <guus@meshlink.io>
 
     This program is free software; you can redistribute it and/or modify

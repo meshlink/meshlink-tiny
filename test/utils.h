@@ -5,7 +5,7 @@
 #include <time.h>
 #include <pthread.h>
 
-#include "../src/meshlink.h"
+#include "../src/meshlink-tiny.h"
 
 // Simple synchronisation between threads
 struct sync_flag {

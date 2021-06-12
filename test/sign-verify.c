@@ -8,7 +8,7 @@
 #include <string.h>
 #include <assert.h>
 
-#include "meshlink.h"
+#include "meshlink-tiny.h"
 #include "utils.h"
 
 int main(void) {
