@@ -69,44 +69,6 @@ static void parse_command(meshlink_handle_t *mesh, char *buf) {
 			fprintf(stderr, "Could not restart MeshLink: %s\n", meshlink_strerror(meshlink_errno));
 			exit(1);
 		}
-	} else if(!strcasecmp(buf, "kick")) {
-		if(!arg) {
-			fprintf(stderr, "/kick requires an argument!\n");
-			return;
-		}
-
-		meshlink_node_t *node = meshlink_get_node(mesh, arg);
-
-		if(!node) {
-			fprintf(stderr, "Error looking up '%s': %s\n", arg, meshlink_strerror(meshlink_errno));
-			return;
-		}
-
-		if(!meshlink_blacklist(mesh, node)) {
-			fprintf(stderr, "Error blacklising '%s': %s", arg, meshlink_strerror(meshlink_errno));
-			return;
-		}
-
-		printf("Node '%s' blacklisted.\n", arg);
-	} else if(!strcasecmp(buf, "whitelist")) {
-		if(!arg) {
-			fprintf(stderr, "/whitelist requires an argument!\n");
-			return;
-		}
-
-		meshlink_node_t *node = meshlink_get_node(mesh, arg);
-
-		if(!node) {
-			fprintf(stderr, "Error looking up '%s': %s\n", arg, meshlink_strerror(meshlink_errno));
-			return;
-		}
-
-		if(!meshlink_whitelist(mesh, node)) {
-			fprintf(stderr, "Error whitelising '%s': %s", arg, meshlink_strerror(meshlink_errno));
-			return;
-		}
-
-		printf("Node '%s' whitelisted.\n", arg);
 	} else if(!strcasecmp(buf, "who")) {
 		if(!arg) {
 			nodes = meshlink_get_all_nodes(mesh, nodes, &nnodes);

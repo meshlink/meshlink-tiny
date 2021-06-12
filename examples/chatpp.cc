@@ -59,22 +59,6 @@ static void parse_command(meshlink::mesh *mesh, char *buf) {
 			fprintf(stderr, "Could not restart MeshLink: %s\n", meshlink::strerror());
 			exit(1);
 		}
-	} else if(!strcasecmp(buf, "kick")) {
-		if(!arg) {
-			fprintf(stderr, "/kick requires an argument!\n");
-			return;
-		}
-
-		meshlink::node *node = mesh->get_node(arg);
-
-		if(!node) {
-			fprintf(stderr, "Error looking up '%s': %s\n", arg, meshlink::strerror());
-			return;
-		}
-
-		mesh->blacklist(node);
-
-		printf("Node '%s' blacklisted.\n", arg);
 	} else if(!strcasecmp(buf, "who")) {
 		if(!arg) {
 			nodes = mesh->get_all_nodes(nodes, &nnodes);

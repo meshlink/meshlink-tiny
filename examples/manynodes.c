@@ -202,24 +202,7 @@ static void parse_command(char *buf) {
 		*arg++ = 0;
 	}
 
-	if(!strcasecmp(buf, "invite")) {
-		char *invitation;
-
-		if(!arg) {
-			fprintf(stderr, "/invite requires an argument!\n");
-			return;
-		}
-
-		invitation = meshlink_invite(meshes[nodeindex], NULL, arg);
-
-		if(!invitation) {
-			fprintf(stderr, "Could not invite '%s': %s\n", arg, meshlink_strerror(meshlink_errno));
-			return;
-		}
-
-		printf("Invitation for %s: %s\n", arg, invitation);
-		free(invitation);
-	} else if(!strcasecmp(buf, "join")) {
+	if(!strcasecmp(buf, "join")) {
 		if(!arg) {
 			fprintf(stderr, "/join requires an argument!\n");
 			return;
@@ -237,44 +220,6 @@ static void parse_command(char *buf) {
 			fprintf(stderr, "Could not restart MeshLink: %s\n", meshlink_strerror(meshlink_errno));
 			exit(1);
 		}
-	} else if(!strcasecmp(buf, "kick")) {
-		if(!arg) {
-			fprintf(stderr, "/kick requires an argument!\n");
-			return;
-		}
-
-		meshlink_node_t *node = meshlink_get_node(meshes[nodeindex], arg);
-
-		if(!node) {
-			fprintf(stderr, "Unknown node '%s'\n", arg);
-			return;
-		}
-
-		if(!meshlink_blacklist(meshes[nodeindex], node)) {
-			fprintf(stderr, "Error blacklising '%s': %s", arg, meshlink_strerror(meshlink_errno));
-			return;
-		}
-
-		printf("Node '%s' blacklisted.\n", arg);
-	} else if(!strcasecmp(buf, "whitelist")) {
-		if(!arg) {
-			fprintf(stderr, "/whitelist requires an argument!\n");
-			return;
-		}
-
-		meshlink_node_t *node = meshlink_get_node(meshes[nodeindex], arg);
-
-		if(!node) {
-			fprintf(stderr, "Error looking up '%s': %s\n", arg, meshlink_strerror(meshlink_errno));
-			return;
-		}
-
-		if(!meshlink_whitelist(meshes[nodeindex], node)) {
-			fprintf(stderr, "Error whitelising '%s': %s", arg, meshlink_strerror(meshlink_errno));
-			return;
-		}
-
-		printf("Node '%s' whitelisted.\n", arg);
 	} else if(!strcasecmp(buf, "who")) {
 		if(!arg) {
 			nodes = meshlink_get_all_nodes(meshes[nodeindex], nodes, &nnodes);
@@ -326,7 +271,6 @@ static void parse_command(char *buf) {
 		printf(
 		        "<name>: <message>     Send a message to the given node.\n"
 		        "                      Subsequent messages don't need the <name>: prefix.\n"
-		        "/invite <name>        Create an invitation for a new node.\n"
 		        "/join <invitation>    Join an existing mesh using an invitation.\n"
 		        "/kick <name>          Blacklist the given node.\n"
 		        "/who [<name>]         List all nodes or show information about the given node.\n"
