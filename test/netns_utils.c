@@ -106,17 +106,17 @@ void change_peer_ip(peer_config_t *peer) {
 }
 
 /// Let the first peer in a list invite all the subsequent peers
-static void invite_peers(peer_config_t *peers, int npeers) {
-	assert(meshlink_start(peers[0].mesh));
-
+static void link_peers(peer_config_t *peers, int npeers) {
 	for(int i = 1; i < npeers; i++) {
-		char *invitation = meshlink_invite_ex(peers[0].mesh, NULL, peers[i].name, MESHLINK_INVITE_LOCAL | MESHLINK_INVITE_NUMERIC);
-		assert(invitation);
-		assert(meshlink_join(peers[i].mesh, invitation));
-		free(invitation);
+		char *export_relay = meshlink_export(peers[0].mesh);
+		char *export_peer = meshlink_export(peers[i].mesh);
+		assert(export_relay);
+		assert(export_peer);
+		assert(meshlink_import(peers[0].mesh, export_peer));
+		assert(meshlink_import(peers[i].mesh, export_relay));
+		free(export_relay);
+		free(export_peer);
 	}
-
-	meshlink_stop(peers[0].mesh);
 }
 
 /// Close meshlink instances and clean up
@@ -138,7 +138,7 @@ peer_config_t *setup_relay_peer_nut(const char *prefix) {
 
 	create_peers(peers, 3, prefix);
 	setup_lan_topology(peers, 3);
-	invite_peers(peers, 3);
+	link_peers(peers, 3);
 
 	return peers;
 }

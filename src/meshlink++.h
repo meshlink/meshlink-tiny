@@ -560,28 +560,6 @@ public:
 		return meshlink_clear_canonical_address(handle, node);
 	}
 
-	/// Add an invitation address for the local node.
-	/** This function adds an address for the local node, which will be used only for invitation URLs.
-	 *  This address is not stored permanently.
-	 *  Multiple addresses can be added using multiple calls to this function.
-	 *
-	 *  @param address      A nul-terminated C string containing the address, which can be either in numeric format or a hostname.
-	 *  @param port         A nul-terminated C string containing the port, which can be either in numeric or symbolic format.
-	 *                      If it is NULL, the listening port's number will be used.
-	 *
-	 *  @return             This function returns true if the address was added, false otherwise.
-	 */
-	bool add_invitation_address(const char *address, const char *port) {
-		return meshlink_add_invitation_address(handle, address, port);
-	}
-
-	/// Clears all invitation address for the local node.
-	/** This function removes all addresses added with meshlink_add_invitation_address().
-	 */
-	void clear_invitation_addresses() {
-		return meshlink_clear_invitation_addresses(handle);
-	}
-
 	/// Add an Address for the local node.
 	/** This function adds an Address for the local node, which will be used for invitation URLs.
 	 *  @deprecated This function is deprecated, use set_canonical_address() and/or add_invitation_address().
@@ -683,16 +661,6 @@ public:
 		return meshlink_set_port(handle, port);
 	}
 
-	/// Set the timeout for invitations.
-	/** This function sets the timeout for invitations.
-	 *  The timeout is retroactively applied to all outstanding invitations.
-	 *
-	 *  @param timeout      The timeout for invitations in seconds.
-	 */
-	void set_invitation_timeout(int timeout) {
-		meshlink_set_invitation_timeout(handle, timeout);
-	}
-
 	/// Set the scheduling granularity of the application
 	/** This should be set to the effective scheduling granularity for the application.
 	 *  This depends on the scheduling granularity of the operating system, the application's
@@ -716,23 +684,6 @@ public:
 	 */
 	void set_storage_policy(meshlink_storage_policy_t policy) {
 		meshlink_set_storage_policy(handle, policy);
-	}
-
-	/// Invite another node into the mesh.
-	/** This function generates an invitation that can be used by another node to join the same mesh as the local node.
-	 *  The generated invitation is a string containing a URL.
-	 *  This URL should be passed by the application to the invitee in a way that no eavesdroppers can see the URL.
-	 *  The URL can only be used once, after the user has joined the mesh the URL is no longer valid.
-	 *
-	 *  @param submesh      A handle to the submesh to put the invitee in.
-	 *  @param name         The name that the invitee will use in the mesh.
-	 *  @param flags        A bitwise-or'd combination of flags that controls how the URL is generated.
-	 *
-	 *  @return             This function returns a string that contains the invitation URL.
-	 *                      The application should call free() after it has finished using the URL.
-	 */
-	char *invite(submesh *submesh, const char *name, uint32_t flags = 0) {
-		return meshlink_invite_ex(handle, submesh, name, flags);
 	}
 
 	/// Use an invitation to join a mesh.

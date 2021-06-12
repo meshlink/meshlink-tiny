@@ -113,12 +113,6 @@ int main(void) {
 	assert(meshlink_get_node_blacklisted(mesh[1], meshlink_get_node(mesh[1], name[2])));
 	assert(meshlink_get_node_blacklisted(mesh[2], meshlink_get_node(mesh[2], name[1])));
 
-	// Generate an invitation for a node that is about to be blacklisted
-
-	char *invitation = meshlink_invite(mesh[0], NULL, "xyzzy");
-	assert(invitation);
-	free(invitation);
-
 	// Whitelisting and blacklisting by name should work.
 
 	assert(meshlink_whitelist_by_name(mesh[0], "quux"));
@@ -141,20 +135,6 @@ int main(void) {
 	assert(!strcmp(nodes[3]->name, "quux"));
 
 	free(nodes);
-
-	// Check that blacklisted nodes are not allowed to be invited, and no invitations are left on disk.
-
-	assert(!meshlink_invite(mesh[0], NULL, "xyzzy"));
-
-	DIR *dir = opendir("blacklist_conf.0/current/invitations");
-	assert(dir);
-	struct dirent *ent;
-
-	while((ent = readdir(dir))) {
-		assert(!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, ".."));
-	}
-
-	closedir(dir);
 
 	// Since these nodes now exist we should be able to forget them.
 

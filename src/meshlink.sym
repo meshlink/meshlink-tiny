@@ -10,7 +10,6 @@ devtool_set_inviter_commits_first
 devtool_trybind_probe
 meshlink_add_address
 meshlink_add_external_address
-meshlink_add_invitation_address
 meshlink_blacklist
 meshlink_blacklist_by_name
 meshlink_channel_abort
@@ -28,7 +27,6 @@ meshlink_channel_open_ex
 meshlink_channel_send
 meshlink_channel_shutdown
 meshlink_clear_canonical_address
-meshlink_clear_invitation_addresses
 meshlink_close
 meshlink_destroy
 meshlink_destroy_ex
@@ -58,8 +56,6 @@ meshlink_get_submesh
 meshlink_hint_address
 meshlink_hint_network_change
 meshlink_import
-meshlink_invite
-meshlink_invite_ex
 meshlink_join
 meshlink_main_loop
 meshlink_open
@@ -92,7 +88,6 @@ meshlink_set_dev_class_maxtimeout
 meshlink_set_dev_class_timeouts
 meshlink_set_error_cb
 meshlink_set_external_address_discovery_url
-meshlink_set_invitation_timeout
 meshlink_set_inviter_commits_first
 meshlink_set_log_cb
 meshlink_set_node_channel_timeout

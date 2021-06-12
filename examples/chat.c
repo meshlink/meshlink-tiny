@@ -51,24 +51,7 @@ static void parse_command(meshlink_handle_t *mesh, char *buf) {
 		*arg++ = 0;
 	}
 
-	if(!strcasecmp(buf, "invite")) {
-		char *invitation;
-
-		if(!arg) {
-			fprintf(stderr, "/invite requires an argument!\n");
-			return;
-		}
-
-		invitation = meshlink_invite(mesh, NULL, arg);
-
-		if(!invitation) {
-			fprintf(stderr, "Could not invite '%s': %s\n", arg, meshlink_strerror(meshlink_errno));
-			return;
-		}
-
-		printf("Invitation for %s: %s\n", arg, invitation);
-		free(invitation);
-	} else if(!strcasecmp(buf, "join")) {
+	if(!strcasecmp(buf, "join")) {
 		if(!arg) {
 			fprintf(stderr, "/join requires an argument!\n");
 			return;
@@ -155,7 +138,6 @@ static void parse_command(meshlink_handle_t *mesh, char *buf) {
 		printf(
 		        "<name>: <message>     Send a message to the given node.\n"
 		        "                      Subsequent messages don't need the <name>: prefix.\n"
-		        "/invite <name>        Create an invitation for a new node.\n"
 		        "/join <invitation>    Join an existing mesh using an invitation.\n"
 		        "/kick <name>          Blacklist the given node.\n"
 		        "/who [<name>]         List all nodes or show information about the given node.\n"

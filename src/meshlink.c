@@ -60,20 +60,6 @@ static int rstrip(char *value) {
 	return len;
 }
 
-static void get_canonical_address(node_t *n, char **hostname, char **port) {
-	if(!n->canonical_address) {
-		return;
-	}
-
-	*hostname = xstrdup(n->canonical_address);
-	char *space = strchr(*hostname, ' ');
-
-	if(space) {
-		*space++ = 0;
-		*port = xstrdup(space);
-	}
-}
-
 static bool is_valid_hostname(const char *hostname) {
 	if(!*hostname) {
 		return false;
@@ -445,158 +431,6 @@ char *meshlink_get_local_address_for_family(meshlink_handle_t *mesh, int family)
 	return xstrdup(localaddr);
 }
 
-static void remove_duplicate_hostnames(char *host[], char *port[], int n) {
-	for(int i = 0; i < n; i++) {
-		if(!host[i]) {
-			continue;
-		}
-
-		// Ignore duplicate hostnames
-		bool found = false;
-
-		for(int j = 0; j < i; j++) {
-			if(!host[j]) {
-				continue;
-			}
-
-			if(strcmp(host[i], host[j])) {
-				continue;
-			}
-
-			if(strcmp(port[i], port[j])) {
-				continue;
-			}
-
-			found = true;
-			break;
-		}
-
-		if(found || !is_valid_hostname(host[i])) {
-			free(host[i]);
-			free(port[i]);
-			host[i] = NULL;
-			port[i] = NULL;
-			continue;
-		}
-	}
-}
-
-// This gets the hostname part for use in invitation URLs
-static char *get_my_hostname(meshlink_handle_t *mesh, uint32_t flags) {
-	int count = 4 + (mesh->invitation_addresses ? mesh->invitation_addresses->count : 0);
-	int n = 0;
-	char *hostname[count];
-	char *port[count];
-	char *hostport = NULL;
-
-	memset(hostname, 0, sizeof(hostname));
-	memset(port, 0, sizeof(port));
-
-	if(!(flags & (MESHLINK_INVITE_LOCAL | MESHLINK_INVITE_PUBLIC))) {
-		flags |= MESHLINK_INVITE_LOCAL | MESHLINK_INVITE_PUBLIC;
-	}
-
-	if(!(flags & (MESHLINK_INVITE_IPV4 | MESHLINK_INVITE_IPV6))) {
-		flags |= MESHLINK_INVITE_IPV4 | MESHLINK_INVITE_IPV6;
-	}
-
-	// Add all explicitly set invitation addresses
-	if(mesh->invitation_addresses) {
-		for list_each(char, combo, mesh->invitation_addresses) {
-			hostname[n] = xstrdup(combo);
-			char *slash = strrchr(hostname[n], '/');
-
-			if(slash) {
-				*slash = 0;
-				port[n] = xstrdup(slash + 1);
-			}
-
-			n++;
-		}
-	}
-
-	// Add local addresses if requested
-	if(flags & MESHLINK_INVITE_LOCAL) {
-		if(flags & MESHLINK_INVITE_IPV4) {
-			hostname[n++] = meshlink_get_local_address_for_family(mesh, AF_INET);
-		}
-
-		if(flags & MESHLINK_INVITE_IPV6) {
-			hostname[n++] = meshlink_get_local_address_for_family(mesh, AF_INET6);
-		}
-	}
-
-	// Add public/canonical addresses if requested
-	if(flags & MESHLINK_INVITE_PUBLIC) {
-		// Try the CanonicalAddress first
-		get_canonical_address(mesh->self, &hostname[n], &port[n]);
-
-		if(!hostname[n] && count == 4) {
-			if(flags & MESHLINK_INVITE_IPV4) {
-				hostname[n++] = meshlink_get_external_address_for_family(mesh, AF_INET);
-			}
-
-			if(flags & MESHLINK_INVITE_IPV6) {
-				hostname[n++] = meshlink_get_external_address_for_family(mesh, AF_INET6);
-			}
-		} else {
-			n++;
-		}
-	}
-
-	for(int i = 0; i < n; i++) {
-		// Ensure we always have a port number
-		if(hostname[i] && !port[i]) {
-			port[i] = xstrdup(mesh->myport);
-		}
-	}
-
-	remove_duplicate_hostnames(hostname, port, n);
-
-	// Resolve the hostnames
-	for(int i = 0; i < n; i++) {
-		if(!hostname[i]) {
-			continue;
-		}
-
-		// Convert what we have to a sockaddr
-		struct addrinfo *ai_in = adns_blocking_request(mesh, xstrdup(hostname[i]), xstrdup(port[i]), SOCK_STREAM, 5);
-
-		if(!ai_in) {
-			continue;
-		}
-
-		// Remember the address(es)
-		for(struct addrinfo *aip = ai_in; aip; aip = aip->ai_next) {
-			node_add_recent_address(mesh, mesh->self, (sockaddr_t *)aip->ai_addr);
-		}
-
-		freeaddrinfo(ai_in);
-		continue;
-	}
-
-	// Remove duplicates again, since IPv4 and IPv6 addresses might map to the same hostname
-	remove_duplicate_hostnames(hostname, port, n);
-
-	// Concatenate all unique address to the hostport string
-	for(int i = 0; i < n; i++) {
-		if(!hostname[i]) {
-			continue;
-		}
-
-		// Append the address to the hostport string
-		char *newhostport;
-		xasprintf(&newhostport, (strchr(hostname[i], ':') ? "%s%s[%s]:%s" : "%s%s%s:%s"), hostport ? hostport : "", hostport ? "," : "", hostname[i], port[i]);
-		free(hostport);
-		hostport = newhostport;
-
-		free(hostname[i]);
-		free(port[i]);
-	}
-
-	return hostport;
-}
-
 static bool try_bind(meshlink_handle_t *mesh, int port) {
 	struct addrinfo *ai = NULL;
 	struct addrinfo hint = {
@@ -678,7 +512,7 @@ static bool write_main_config_files(meshlink_handle_t *mesh) {
 	packmsg_add_uint32(&out, MESHLINK_CONFIG_VERSION);
 	packmsg_add_str(&out, mesh->name);
 	packmsg_add_bin(&out, ecdsa_get_private_key(mesh->private_key), 96);
-	packmsg_add_bin(&out, ecdsa_get_private_key(mesh->invitation_key), 96);
+	packmsg_add_nil(&out); // Invitation keys are not supported
 	packmsg_add_uint16(&out, atoi(mesh->myport));
 
 	if(!packmsg_output_ok(&out)) {
@@ -1005,12 +839,11 @@ const char *meshlink_strerror(meshlink_errno_t err) {
 }
 
 static bool ecdsa_keygen(meshlink_handle_t *mesh) {
-	logger(mesh, MESHLINK_DEBUG, "Generating ECDSA keypairs:\n");
+	logger(mesh, MESHLINK_DEBUG, "Generating ECDSA keypair:\n");
 
 	mesh->private_key = ecdsa_generate();
-	mesh->invitation_key = ecdsa_generate();
 
-	if(!mesh->private_key || !mesh->invitation_key) {
+	if(!mesh->private_key) {
 		logger(mesh, MESHLINK_ERROR, "Error during key generation!\n");
 		meshlink_errno = MESHLINK_EINTERNAL;
 		return false;
@@ -1133,15 +966,14 @@ static bool meshlink_read_config(meshlink_handle_t *mesh) {
 
 	packmsg_input_t in = {config.buf, config.len};
 	const void *private_key;
-	const void *invitation_key;
 
 	uint32_t version = packmsg_get_uint32(&in);
 	char *name = packmsg_get_str_dup(&in);
 	uint32_t private_key_len = packmsg_get_bin_raw(&in, &private_key);
-	uint32_t invitation_key_len = packmsg_get_bin_raw(&in, &invitation_key);
+	packmsg_skip_element(&in); // Invitation key is not supported
 	uint16_t myport = packmsg_get_uint16(&in);
 
-	if(!packmsg_done(&in) || version != MESHLINK_CONFIG_VERSION || private_key_len != 96 || invitation_key_len != 96) {
+	if(!packmsg_done(&in) || version != MESHLINK_CONFIG_VERSION || private_key_len != 96) {
 		logger(NULL, MESHLINK_ERROR, "Error parsing main configuration file!");
 		free(name);
 		config_free(&config);
@@ -1160,7 +992,6 @@ static bool meshlink_read_config(meshlink_handle_t *mesh) {
 	mesh->name = name;
 	xasprintf(&mesh->myport, "%u", myport);
 	mesh->private_key = ecdsa_set_private_key(private_key);
-	mesh->invitation_key = ecdsa_set_private_key(invitation_key);
 	config_free(&config);
 
 	/* Create a node for ourself and read our host configuration file */
@@ -1539,7 +1370,6 @@ meshlink_handle_t *meshlink_open_ex(const meshlink_open_params_t *params) {
 	mesh->appname = xstrdup(params->appname);
 	mesh->devclass = params->devclass;
 	mesh->discovery.enabled = true;
-	mesh->invitation_timeout = 604800; // 1 week
 	mesh->netns = params->netns;
 	mesh->submeshes = NULL;
 	mesh->log_cb = global_log_cb;
@@ -1922,8 +1752,6 @@ void meshlink_close(meshlink_handle_t *mesh) {
 
 #endif
 
-	ecdsa_free(mesh->invitation_key);
-
 	if(mesh->netns != -1) {
 		close(mesh->netns);
 	}
@@ -1941,10 +1769,6 @@ void meshlink_close(meshlink_handle_t *mesh) {
 	free(mesh->external_address_url);
 	free(mesh->packet);
 	ecdsa_free(mesh->private_key);
-
-	if(mesh->invitation_addresses) {
-		list_delete_list(mesh->invitation_addresses);
-	}
 
 	main_config_unlock(mesh);
 
@@ -2687,22 +2511,6 @@ bool meshlink_verify(meshlink_handle_t *mesh, meshlink_node_t *source, const voi
 	return rval;
 }
 
-static bool refresh_invitation_key(meshlink_handle_t *mesh) {
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	size_t count = invitation_purge_old(mesh, time(NULL) - mesh->invitation_timeout);
-
-	if(!count) {
-		// TODO: Update invitation key if necessary?
-	}
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	return mesh->invitation_key;
-}
-
 bool meshlink_set_canonical_address(meshlink_handle_t *mesh, meshlink_node_t *node, const char *address, const char *port) {
 	logger(mesh, MESHLINK_DEBUG, "meshlink_set_canonical_address(%s, %s, %s)", node ? node->name : "(null)", address ? address : "(null)", port ? port : "(null)");
 
@@ -2776,68 +2584,6 @@ bool meshlink_clear_canonical_address(meshlink_handle_t *mesh, meshlink_node_t *
 	pthread_mutex_unlock(&mesh->mutex);
 
 	return config_sync(mesh, "current");
-}
-
-bool meshlink_add_invitation_address(struct meshlink_handle *mesh, const char *address, const char *port) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_add_invitation_address(%s, %s)", address ? address : "(null)", port ? port : "(null)");
-
-	if(!mesh || !address) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return false;
-	}
-
-	if(!is_valid_hostname(address)) {
-		logger(mesh, MESHLINK_ERROR, "Invalid character in address: %s\n", address);
-		meshlink_errno = MESHLINK_EINVAL;
-		return false;
-	}
-
-	if(port && !is_valid_port(port)) {
-		logger(mesh, MESHLINK_ERROR, "Invalid character in port: %s\n", address);
-		meshlink_errno = MESHLINK_EINVAL;
-		return false;
-	}
-
-	char *combo;
-
-	if(port) {
-		xasprintf(&combo, "%s/%s", address, port);
-	} else {
-		combo = xstrdup(address);
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	if(!mesh->invitation_addresses) {
-		mesh->invitation_addresses = list_alloc((list_action_t)free);
-	}
-
-	list_insert_tail(mesh->invitation_addresses, combo);
-	pthread_mutex_unlock(&mesh->mutex);
-
-	return true;
-}
-
-void meshlink_clear_invitation_addresses(struct meshlink_handle *mesh) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_clear_invitation_addresses()");
-
-	if(!mesh) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	if(mesh->invitation_addresses) {
-		list_delete_list(mesh->invitation_addresses);
-		mesh->invitation_addresses = NULL;
-	}
-
-	pthread_mutex_unlock(&mesh->mutex);
 }
 
 bool meshlink_add_address(meshlink_handle_t *mesh, const char *address) {
@@ -2956,163 +2702,6 @@ done:
 	pthread_mutex_unlock(&mesh->mutex);
 
 	return rval && meshlink_get_port(mesh) == port;
-}
-
-void meshlink_set_invitation_timeout(meshlink_handle_t *mesh, int timeout) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_invitation_timeout(%d)", timeout);
-
-	mesh->invitation_timeout = timeout;
-}
-
-char *meshlink_invite_ex(meshlink_handle_t *mesh, meshlink_submesh_t *submesh, const char *name, uint32_t flags) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_invite_ex(%s, %s, %u)", submesh ? submesh->name : "(null)", name ? name : "(null)", flags);
-
-	meshlink_submesh_t *s = NULL;
-
-	if(!mesh) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return NULL;
-	}
-
-	if(submesh) {
-		s = (meshlink_submesh_t *)lookup_submesh(mesh, submesh->name);
-
-		if(s != submesh) {
-			logger(mesh, MESHLINK_ERROR, "Invalid submesh handle.\n");
-			meshlink_errno = MESHLINK_EINVAL;
-			return NULL;
-		}
-	} else {
-		s = (meshlink_submesh_t *)mesh->self->submesh;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	// Check validity of the new node's name
-	if(!check_id(name)) {
-		logger(mesh, MESHLINK_ERROR, "Invalid name for node.\n");
-		meshlink_errno = MESHLINK_EINVAL;
-		pthread_mutex_unlock(&mesh->mutex);
-		return NULL;
-	}
-
-	// Ensure no host configuration file with that name exists
-	if(config_exists(mesh, "current", name)) {
-		logger(mesh, MESHLINK_ERROR, "A host config file for %s already exists!\n", name);
-		meshlink_errno = MESHLINK_EEXIST;
-		pthread_mutex_unlock(&mesh->mutex);
-		return NULL;
-	}
-
-	// Ensure no other nodes know about this name
-	if(lookup_node(mesh, name)) {
-		logger(mesh, MESHLINK_ERROR, "A node with name %s is already known!\n", name);
-		meshlink_errno = MESHLINK_EEXIST;
-		pthread_mutex_unlock(&mesh->mutex);
-		return NULL;
-	}
-
-	// Get the local address
-	char *address = get_my_hostname(mesh, flags);
-
-	if(!address) {
-		logger(mesh, MESHLINK_ERROR, "No Address known for ourselves!\n");
-		meshlink_errno = MESHLINK_ERESOLV;
-		pthread_mutex_unlock(&mesh->mutex);
-		return NULL;
-	}
-
-	if(!refresh_invitation_key(mesh)) {
-		meshlink_errno = MESHLINK_EINTERNAL;
-		pthread_mutex_unlock(&mesh->mutex);
-		return NULL;
-	}
-
-	// If we changed our own host config file, write it out now
-	if(mesh->self->status.dirty) {
-		if(!node_write_config(mesh, mesh->self, false)) {
-			logger(mesh, MESHLINK_ERROR, "Could not write our own host config file!\n");
-			pthread_mutex_unlock(&mesh->mutex);
-			return NULL;
-		}
-	}
-
-	char hash[64];
-
-	// Create a hash of the key.
-	char *fingerprint = ecdsa_get_base64_public_key(mesh->invitation_key);
-	sha512(fingerprint, strlen(fingerprint), hash);
-	b64encode_urlsafe(hash, hash, 18);
-
-	// Create a random cookie for this invitation.
-	char cookie[25];
-	randomize(cookie, 18);
-
-	// Create a filename that doesn't reveal the cookie itself
-	char buf[18 + strlen(fingerprint)];
-	char cookiehash[64];
-	memcpy(buf, cookie, 18);
-	memcpy(buf + 18, fingerprint, sizeof(buf) - 18);
-	sha512(buf, sizeof(buf), cookiehash);
-	b64encode_urlsafe(cookiehash, cookiehash, 18);
-
-	b64encode_urlsafe(cookie, cookie, 18);
-
-	free(fingerprint);
-
-	/* Construct the invitation file */
-	uint8_t outbuf[4096];
-	packmsg_output_t inv = {outbuf, sizeof(outbuf)};
-
-	packmsg_add_uint32(&inv, MESHLINK_INVITATION_VERSION);
-	packmsg_add_str(&inv, name);
-	packmsg_add_str(&inv, s ? s->name : CORE_MESH);
-	packmsg_add_int32(&inv, DEV_CLASS_UNKNOWN); /* TODO: allow this to be set by inviter? */
-
-	/* TODO: Add several host config files to bootstrap connections.
-	 * Note: make sure we only add config files of nodes that are in the core mesh or the same submesh,
-	 * and are not blacklisted.
-	 */
-	config_t configs[5];
-	memset(configs, 0, sizeof(configs));
-	int count = 0;
-
-	if(config_read(mesh, "current", mesh->self->name, &configs[count], mesh->config_key)) {
-		count++;
-	}
-
-	/* Append host config files to the invitation file */
-	packmsg_add_array(&inv, count);
-
-	for(int i = 0; i < count; i++) {
-		packmsg_add_bin(&inv, configs[i].buf, configs[i].len);
-		config_free(&configs[i]);
-	}
-
-	config_t config = {outbuf, packmsg_output_size(&inv, outbuf)};
-
-	if(!invitation_write(mesh, "current", cookiehash, &config, mesh->config_key)) {
-		logger(mesh, MESHLINK_DEBUG, "Could not create invitation file %s: %s\n", cookiehash, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		pthread_mutex_unlock(&mesh->mutex);
-		return NULL;
-	}
-
-	// Create an URL from the local address, key hash and cookie
-	char *url;
-	xasprintf(&url, "%s/%s%s", address, hash, cookie);
-	free(address);
-
-	pthread_mutex_unlock(&mesh->mutex);
-	return url;
-}
-
-char *meshlink_invite(meshlink_handle_t *mesh, meshlink_submesh_t *submesh, const char *name) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_invite_ex(%s, %s)", submesh ? submesh->name : "(null)", name ? name : "(null)");
-
-	return meshlink_invite_ex(mesh, submesh, name, 0);
 }
 
 bool meshlink_join(meshlink_handle_t *mesh, const char *invitation) {
@@ -3613,9 +3202,6 @@ static bool blacklist(meshlink_handle_t *mesh, node_t *n) {
 		mesh->node_status_cb(mesh, (meshlink_node_t *)n, false);
 	}
 
-	/* Remove any outstanding invitations */
-	invitation_purge_node(mesh, n->name);
-
 	return node_write_config(mesh, n, true) && config_sync(mesh, "current");
 }
 
@@ -3804,9 +3390,6 @@ bool meshlink_forget_node(meshlink_handle_t *mesh, meshlink_node_t *node) {
 		pthread_mutex_unlock(&mesh->mutex);
 		return false;
 	}
-
-	/* Delete any pending invitations */
-	invitation_purge_node(mesh, n->name);
 
 	/* Delete the node struct and any remaining edges referencing this node */
 	node_del(mesh, n);

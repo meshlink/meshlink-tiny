@@ -922,29 +922,6 @@ bool meshlink_set_canonical_address(struct meshlink_handle *mesh, struct meshlin
  */
 bool meshlink_clear_canonical_address(struct meshlink_handle *mesh, struct meshlink_node *node) __attribute__((__warn_unused_result__));
 
-/// Add an invitation address for the local node.
-/** This function adds an address for the local node, which will be used only for invitation URLs.
- *  This address is not stored permanently.
- *  Multiple addresses can be added using multiple calls to this function.
- *
- *  \memberof meshlink_handle
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param address      A nul-terminated C string containing the address, which can be either in numeric format or a hostname.
- *  @param port         A nul-terminated C string containing the port, which can be either in numeric or symbolic format.
- *                      If it is NULL, the current listening port's number will be used.
- *
- *  @return             This function returns true if the address was added, false otherwise.
- */
-bool meshlink_add_invitation_address(struct meshlink_handle *mesh, const char *address, const char *port) __attribute__((__warn_unused_result__));
-
-/// Clears all invitation address for the local node.
-/** This function removes all addresses added with meshlink_add_invitation_address().
- *
- *  \memberof meshlink_handle
- *  @param mesh         A handle which represents an instance of MeshLink.
- */
-void meshlink_clear_invitation_addresses(struct meshlink_handle *mesh);
-
 /// Add an Address for the local node.
 /** This function adds an Address for the local node, which will be used for invitation URLs.
  *  @deprecated This function is deprecated, use meshlink_set_canonical_address() and/or meshlink_add_invitation_address().
@@ -1078,55 +1055,6 @@ int meshlink_get_port(struct meshlink_handle *mesh) __attribute__((__warn_unused
 
 bool meshlink_set_port(struct meshlink_handle *mesh, int port) __attribute__((__warn_unused_result__));
 
-/// Set the timeout for invitations.
-/** This function sets the timeout for invitations.
- *  Note that timeouts are only checked at the time a node tries to join using an invitation.
- *  The default timeout for invitations is 1 week.
- *
- *  \memberof meshlink_handle
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param timeout      The timeout for invitations in seconds.
- */
-void meshlink_set_invitation_timeout(struct meshlink_handle *mesh, int timeout);
-
-/// Invite another node into the mesh.
-/** This function generates an invitation that can be used by another node to join the same mesh as the local node.
- *  The generated invitation is a string containing a URL.
- *  This URL should be passed by the application to the invitee in a way that no eavesdroppers can see the URL.
- *  The URL can only be used once, after the user has joined the mesh the URL is no longer valid.
- *
- *  \memberof meshlink_handle
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param submesh      A handle which represents an instance of SubMesh.
- *  @param name         A nul-terminated C string containing the name that the invitee will be allowed to use in the mesh.
- *                      After this function returns, the application is free to overwrite or free @a name.
- *  @param flags        A bitwise-or'd combination of flags that controls how the URL is generated.
- *
- *  @return             This function returns a nul-terminated C string that contains the invitation URL, or NULL in case of an error.
- *                      The application should call free() after it has finished using the URL.
- */
-char *meshlink_invite_ex(struct meshlink_handle *mesh, struct meshlink_submesh *submesh, const char *name, uint32_t flags) __attribute__((__warn_unused_result__));
-
-/// Invite another node into the mesh.
-/** This function generates an invitation that can be used by another node to join the same mesh as the local node.
- *  The generated invitation is a string containing a URL.
- *  This URL should be passed by the application to the invitee in a way that no eavesdroppers can see the URL.
- *  The URL can only be used once, after the user has joined the mesh the URL is no longer valid.
- *
- *  Calling this function is equal to callen meshlink_invite_ex() with flags set to 0.
- *
- *  \memberof meshlink_handle
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param submesh      A handle which represents an instance of SubMesh.
- *  @param name         A nul-terminated C string containing the name that the invitee will be allowed to use in the mesh.
- *                      After this function returns, the application is free to overwrite or free @a name.
- *
- *  @return             This function returns a nul-terminated C string that contains the invitation URL, or NULL in case of an error.
- *                      The application should call free() after it has finished using the URL.
- */
-char *meshlink_invite(struct meshlink_handle *mesh, struct meshlink_submesh *submesh, const char *name) __attribute__((__warn_unused_result__));
-
-/// Use an invitation to join a mesh.
 /** This function allows the local node to join an existing mesh using an invitation URL generated by another node.
  *  An invitation can only be used if the local node has never connected to other nodes before.
  *  After a successfully accepted invitation, the name of the local node may have changed.

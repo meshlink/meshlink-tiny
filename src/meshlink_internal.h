@@ -146,11 +146,9 @@ struct meshlink_handle {
 	char *myport;
 
 	struct ecdsa *private_key;
-	struct ecdsa *invitation_key;
 
 	dev_class_t devclass;
 
-	int invitation_timeout;
 	int udp_choice;
 
 	dev_class_traits_t dev_class_traits[DEV_CLASS_COUNT];
@@ -165,7 +163,6 @@ struct meshlink_handle {
 	FILE *lockfile;
 	void *config_key;
 	char *external_address_url;
-	struct list_t *invitation_addresses;
 	meshlink_storage_policy_t storage_policy;
 
 	// Thread management

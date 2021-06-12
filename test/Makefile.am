@@ -19,7 +19,6 @@ TESTS = \
 	ephemeral \
 	get-all-nodes \
 	import-export \
-	invite-join \
 	meta-connections \
 	sign-verify \
 	storage-policy \
@@ -31,9 +30,9 @@ TESTS = \
 TESTS += \
 	api_set_node_status_cb
 
-if BLACKBOX_TESTS
-SUBDIRS = blackbox
-endif
+#if BLACKBOX_TESTS
+#SUBDIRS = blackbox
+#endif
 
 dist_check_SCRIPTS = $(TESTS)
 
@@ -63,7 +62,6 @@ check_PROGRAMS = \
 	ephemeral \
 	get-all-nodes \
 	import-export \
-	invite-join \
 	meta-connections \
 	sign-verify \
 	storage-policy \
@@ -140,9 +138,6 @@ get_all_nodes_LDADD = $(top_builddir)/src/libmeshlink.la
 
 import_export_SOURCES = import-export.c utils.c utils.h
 import_export_LDADD = $(top_builddir)/src/libmeshlink.la
-
-invite_join_SOURCES = invite-join.c utils.c utils.h
-invite_join_LDADD = $(top_builddir)/src/libmeshlink.la
 
 meta_connections_SOURCES = meta-connections.c netns_utils.c netns_utils.h utils.c utils.h
 meta_connections_LDADD = $(top_builddir)/src/libmeshlink.la
