@@ -1017,16 +1017,6 @@ public:
 		return meshlink_channel_get_mss(handle, channel);
 	};
 
-	/// Enable or disable zeroconf discovery of local peers
-	/** This controls whether zeroconf discovery using the Catta library will be
-	 *  enabled to search for peers on the local network. By default, it is enabled.
-	 *
-	 *  @param enable  Set to true to enable discovery, false to disable.
-	 */
-	void enable_discovery(bool enable = true) {
-		meshlink_enable_discovery(handle, enable);
-	}
-
 	/// Inform MeshLink that the local network configuration might have changed
 	/** This is intended to be used when there is no way for MeshLink to get notifications of local network changes.
 	 *  It forces MeshLink to scan all network interfaces for changes in up/down status and new/removed addresses,
@@ -1078,17 +1068,6 @@ public:
 	 */
 	void set_inviter_commits_first(bool inviter_commits_first) {
 		meshlink_set_inviter_commits_first(handle, inviter_commits_first);
-	}
-
-	/// Set the URL used to discover the host's external address
-	/** For generating invitation URLs, MeshLink can look up the externally visible address of the local node.
-	 *  It does so by querying an external service. By default, this is http://meshlink.io/host.cgi.
-	 *  Only URLs starting with http:// are supported.
-	 *
-	 *  @param url   The URL to use for external address queries, or NULL to revert back to the default URL.
-	 */
-	void set_external_address_discovery_url(const char *url) {
-		meshlink_set_external_address_discovery_url(handle, url);
 	}
 
 private:

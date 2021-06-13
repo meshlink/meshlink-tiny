@@ -174,44 +174,6 @@ static void handle_meta_io(event_loop_t *loop, void *data, int flags) {
 	}
 }
 
-// Find edges pointing to this node, and use them to build a list of unique, known addresses.
-static struct addrinfo *get_known_addresses(node_t *n) {
-	struct addrinfo *ai = NULL;
-
-	for splay_each(edge_t, e, n->edge_tree) {
-		if(!e->reverse) {
-			continue;
-		}
-
-		bool found = false;
-
-		for(struct addrinfo *aip = ai; aip; aip = aip->ai_next) {
-			if(!sockaddrcmp(&e->reverse->address, (sockaddr_t *)aip->ai_addr)) {
-				found = true;
-				break;
-			}
-		}
-
-		if(found) {
-			continue;
-		}
-
-		// Create a new struct addrinfo, and put it at the head of the list.
-		struct addrinfo *nai = xzalloc(sizeof(*nai) + SALEN(e->reverse->address.sa));
-		nai->ai_next = ai;
-		ai = nai;
-
-		ai->ai_family = e->reverse->address.sa.sa_family;
-		ai->ai_socktype = SOCK_STREAM;
-		ai->ai_protocol = IPPROTO_TCP;
-		ai->ai_addrlen = SALEN(e->reverse->address.sa);
-		ai->ai_addr = (struct sockaddr *)(nai + 1);
-		memcpy(ai->ai_addr, &e->reverse->address, ai->ai_addrlen);
-	}
-
-	return ai;
-}
-
 // Build a list of recently seen addresses.
 static struct addrinfo *get_recent_addresses(node_t *n) {
 	struct addrinfo *ai = NULL;
@@ -330,24 +292,6 @@ static bool get_next_outgoing_address(meshlink_handle_t *mesh, outgoing_t *outgo
 	if(outgoing->state == OUTGOING_RECENT) {
 		if(!outgoing->aip) {
 			outgoing->ai = get_recent_addresses(outgoing->node);
-			outgoing->aip = outgoing->ai;
-		} else {
-			outgoing->aip = outgoing->aip->ai_next;
-		}
-
-		if(outgoing->aip) {
-			return true;
-		}
-
-		free_known_addresses(outgoing->ai);
-		outgoing->ai = NULL;
-		outgoing->aip = NULL;
-		outgoing->state = OUTGOING_KNOWN;
-	}
-
-	if(outgoing->state == OUTGOING_KNOWN) {
-		if(!outgoing->aip) {
-			outgoing->ai = get_known_addresses(outgoing->node);
 			outgoing->aip = outgoing->ai;
 		} else {
 			outgoing->aip = outgoing->aip->ai_next;

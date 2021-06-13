@@ -22,7 +22,6 @@
 #include "conf.h"
 #include "connection.h"
 #include "ecdsa.h"
-#include "graph.h"
 #include "logger.h"
 #include "meshlink_internal.h"
 #include "net.h"
@@ -121,16 +120,8 @@ bool node_read_public_key(meshlink_handle_t *mesh, node_t *n) {
 		}
 	}
 
-	time_t last_reachable = packmsg_get_int64(&in);
-	time_t last_unreachable = packmsg_get_int64(&in);
-
-	if(!n->last_reachable) {
-		n->last_reachable = last_reachable;
-	}
-
-	if(!n->last_unreachable) {
-		n->last_unreachable = last_unreachable;
-	}
+	packmsg_skip_element(&in); // last_reachable
+	packmsg_skip_element(&in); // last_unreachable
 
 	config_free(&config);
 	return true;
@@ -212,8 +203,8 @@ bool node_read_from_config(meshlink_handle_t *mesh, node_t *n, const config_t *c
 		}
 	}
 
-	n->last_reachable = packmsg_get_int64(&in);
-	n->last_unreachable = packmsg_get_int64(&in);
+	packmsg_skip_element(&in); // last_reachable
+	packmsg_skip_element(&in); // last_unreachable
 
 	return packmsg_done(&in);
 }
@@ -271,8 +262,8 @@ bool node_write_config(meshlink_handle_t *mesh, node_t *n, bool new_key) {
 		packmsg_add_sockaddr(&out, &n->recent[i]);
 	}
 
-	packmsg_add_int64(&out, n->last_reachable);
-	packmsg_add_int64(&out, n->last_unreachable);
+	packmsg_add_int64(&out, 0); // last_reachable
+	packmsg_add_int64(&out, 0); // last_unreachable
 
 	if(!packmsg_output_ok(&out)) {
 		meshlink_errno = MESHLINK_EINTERNAL;
@@ -394,79 +385,6 @@ int setup_tcp_listen_socket(meshlink_handle_t *mesh, const struct addrinfo *aip)
 	return nfd;
 }
 
-int setup_udp_listen_socket(meshlink_handle_t *mesh, const struct addrinfo *aip) {
-	int nfd = socket(aip->ai_family, SOCK_DGRAM, IPPROTO_UDP);
-
-	if(nfd == -1) {
-		return -1;
-	}
-
-#ifdef FD_CLOEXEC
-	fcntl(nfd, F_SETFD, FD_CLOEXEC);
-#endif
-
-#ifdef O_NONBLOCK
-	int flags = fcntl(nfd, F_GETFL);
-
-	if(fcntl(nfd, F_SETFL, flags | O_NONBLOCK) < 0) {
-		closesocket(nfd);
-		logger(mesh, MESHLINK_ERROR, "System call `%s' failed: %s", "fcntl", strerror(errno));
-		return -1;
-	}
-
-#elif defined(WIN32)
-	unsigned long arg = 1;
-
-	if(ioctlsocket(nfd, FIONBIO, &arg) != 0) {
-		closesocket(nfd);
-		logger(mesh, MESHLINK_ERROR, "Call to `%s' failed: %s", "ioctlsocket", sockstrerror(sockerrno));
-		return -1;
-	}
-
-#endif
-
-	int option = 1;
-	setsockopt(nfd, SOL_SOCKET, SO_REUSEADDR, (void *)&option, sizeof(option));
-	setsockopt(nfd, SOL_SOCKET, SO_BROADCAST, (void *)&option, sizeof(option));
-
-#if defined(IPV6_V6ONLY)
-
-	if(aip->ai_family == AF_INET6) {
-		setsockopt(nfd, IPPROTO_IPV6, IPV6_V6ONLY, (void *)&option, sizeof(option));
-	}
-
-#endif
-
-#if defined(IP_DONTFRAG) && !defined(IP_DONTFRAGMENT)
-#define IP_DONTFRAGMENT IP_DONTFRAG
-#endif
-
-#if defined(IP_MTU_DISCOVER) && defined(IP_PMTUDISC_DO)
-	option = IP_PMTUDISC_DO;
-	setsockopt(nfd, IPPROTO_IP, IP_MTU_DISCOVER, (void *)&option, sizeof(option));
-#elif defined(IP_DONTFRAGMENT)
-	option = 1;
-	setsockopt(nfd, IPPROTO_IP, IP_DONTFRAGMENT, (void *)&option, sizeof(option));
-#endif
-
-	if(aip->ai_family == AF_INET6) {
-#if defined(IPV6_MTU_DISCOVER) && defined(IPV6_PMTUDISC_DO)
-		option = IPV6_PMTUDISC_DO;
-		setsockopt(nfd, IPPROTO_IPV6, IPV6_MTU_DISCOVER, (void *)&option, sizeof(option));
-#elif defined(IPV6_DONTFRAG)
-		option = 1;
-		setsockopt(nfd, IPPROTO_IPV6, IPV6_DONTFRAG, (void *)&option, sizeof(option));
-#endif
-	}
-
-	if(bind(nfd, aip->ai_addr, aip->ai_addrlen)) {
-		closesocket(nfd);
-		return -1;
-	}
-
-	return nfd;
-}
-
 /*
   Add listening sockets.
 */
@@ -523,18 +441,7 @@ static bool add_listen_sockets(meshlink_handle_t *mesh) {
 			}
 		}
 
-		/* If TCP worked, then we require that UDP works as well. */
-
-		int udp_fd = setup_udp_listen_socket(mesh, aip);
-
-		if(udp_fd == -1) {
-			closesocket(tcp_fd);
-			success = false;
-			break;
-		}
-
 		io_add(&mesh->loop, &mesh->listen_socket[mesh->listen_sockets].tcp, handle_new_meta_connection, &mesh->listen_socket[mesh->listen_sockets], tcp_fd, IO_READ);
-		io_add(&mesh->loop, &mesh->listen_socket[mesh->listen_sockets].udp, handle_incoming_vpn_data, &mesh->listen_socket[mesh->listen_sockets], udp_fd, IO_READ);
 
 		if(mesh->log_level <= MESHLINK_INFO) {
 			char *hostname = sockaddr2hostname((sockaddr_t *) aip->ai_addr);
@@ -562,9 +469,7 @@ static bool add_listen_sockets(meshlink_handle_t *mesh) {
 	if(!success) {
 		for(int i = 0; i < mesh->listen_sockets; i++) {
 			io_del(&mesh->loop, &mesh->listen_socket[i].tcp);
-			io_del(&mesh->loop, &mesh->listen_socket[i].udp);
 			closesocket(mesh->listen_socket[i].tcp.fd);
-			closesocket(mesh->listen_socket[i].udp.fd);
 		}
 
 		mesh->listen_sockets = 0;
@@ -626,7 +531,6 @@ bool setup_network(meshlink_handle_t *mesh) {
 	init_connections(mesh);
 	init_submeshes(mesh);
 	init_nodes(mesh);
-	init_edges(mesh);
 	init_requests(mesh);
 
 	if(!setup_myself(mesh)) {
@@ -651,13 +555,10 @@ void close_network_connections(meshlink_handle_t *mesh) {
 
 	for(int i = 0; i < mesh->listen_sockets; i++) {
 		io_del(&mesh->loop, &mesh->listen_socket[i].tcp);
-		io_del(&mesh->loop, &mesh->listen_socket[i].udp);
 		closesocket(mesh->listen_socket[i].tcp.fd);
-		closesocket(mesh->listen_socket[i].udp.fd);
 	}
 
 	exit_requests(mesh);
-	exit_edges(mesh);
 	exit_nodes(mesh);
 	exit_submeshes(mesh);
 	exit_connections(mesh);

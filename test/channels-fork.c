@@ -84,8 +84,6 @@ static int main1(int rfd, int wfd) {
 	meshlink_handle_t *mesh = meshlink_open("channels_fork_conf.1", "foo", "channels-fork", DEV_CLASS_BACKBONE);
 	assert(mesh);
 
-	meshlink_enable_discovery(mesh, false);
-
 	assert(meshlink_set_canonical_address(mesh, meshlink_get_self(mesh), "localhost", NULL));
 
 	char *data = meshlink_export(mesh);
@@ -137,8 +135,6 @@ static int main2(int rfd, int wfd) {
 	assert(meshlink_destroy("channels_fork_conf.2"));
 	meshlink_handle_t *mesh = meshlink_open("channels_fork_conf.2", "bar", "channels-fork", DEV_CLASS_BACKBONE);
 	assert(mesh);
-
-	meshlink_enable_discovery(mesh, false);
 
 	assert(meshlink_set_canonical_address(mesh, meshlink_get_self(mesh), "localhost", NULL));
 

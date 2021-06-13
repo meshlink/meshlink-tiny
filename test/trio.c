@@ -119,13 +119,6 @@ int main(void) {
 
 	assert(wait_sync_flag(&received, 15));
 
-	// Check that the second and third node have autoconnected to each other
-
-	devtool_edge_t *edges = NULL;
-	size_t nedges = 0;
-	assert_after((edges = devtool_get_all_edges(mesh[1], edges, &nedges), nedges == 3), 15);
-	free(edges);
-
 	// Stop the first node
 
 	meshlink_stop(mesh[0]);

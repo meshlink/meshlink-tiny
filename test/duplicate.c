@@ -36,7 +36,6 @@ int main(void) {
 		assert(mesh[i]);
 
 		assert(meshlink_set_canonical_address(mesh[i], meshlink_get_self(mesh[i]), "localhost", NULL));
-		meshlink_enable_discovery(mesh[i], false);
 
 		meshlink_set_node_duplicate_cb(mesh[i], handle_duplicate);
 	}

@@ -88,15 +88,7 @@ typedef struct node_t {
 	sockaddr_t recent[MAX_RECENT];          /* Recently seen addresses */
 	sockaddr_t catta_address;               /* Latest address seen by Catta */
 
-	// Graph-related member variables
-	time_t last_reachable;
-	time_t last_unreachable;
-
-	int distance;
 	struct node_t *nexthop;                 /* nearest node from us to him */
-	struct edge_t *prevedge;                /* nearest node from him to us */
-
-	struct splay_tree_t *edge_tree;         /* Edges with this node as one of the endpoints */
 } node_t;
 
 void init_nodes(struct meshlink_handle *mesh);
@@ -106,8 +98,6 @@ void free_node(node_t *n);
 void node_add(struct meshlink_handle *mesh, node_t *n);
 void node_del(struct meshlink_handle *mesh, node_t *n);
 node_t *lookup_node(struct meshlink_handle *mesh, const char *name) __attribute__((__warn_unused_result__));
-node_t *lookup_node_udp(struct meshlink_handle *mesh, const sockaddr_t *sa) __attribute__((__warn_unused_result__));
-void update_node_udp(struct meshlink_handle *mesh, node_t *n, const sockaddr_t *sa);
 bool node_add_recent_address(struct meshlink_handle *mesh, node_t *n, const sockaddr_t *addr);
 
 #endif

@@ -42,19 +42,15 @@ libmeshlink_tiny_la_SOURCES = \
 	conf.c conf.h \
 	connection.c connection.h \
 	crypto.c crypto.h \
-	discovery.c discovery.h \
 	dropin.c dropin.h \
 	ecdh.h \
 	ecdsa.h \
 	ecdsagen.h \
-	edge.c edge.h \
 	event.c event.h \
-	graph.c graph.h \
 	hash.c hash.h \
 	have.h \
 	list.c list.h \
 	logger.c logger.h \
-	mdns.c mdns.h \
 	meshlink.c meshlink-tiny.h meshlink.sym \
 	meshlink_internal.h \
 	meshlink_queue.h \

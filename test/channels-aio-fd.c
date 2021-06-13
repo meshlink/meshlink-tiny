@@ -102,9 +102,6 @@ int main(void) {
 
 	mesh_b->priv = in_infos;
 
-	meshlink_enable_discovery(mesh_a, false);
-	meshlink_enable_discovery(mesh_b, false);
-
 	// Set the callbacks.
 
 	meshlink_set_channel_accept_cb(mesh_b, accept_cb);

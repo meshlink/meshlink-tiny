@@ -411,17 +411,6 @@ bool ans_key_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 			return false;
 		}
 
-		/* Append the known UDP address of the from node, if we have a confirmed one */
-		if(!*address && from->status.udp_confirmed && from->address.sa.sa_family != AF_UNSPEC) {
-			char *reflexive_address, *reflexive_port;
-			logger(mesh, MESHLINK_DEBUG, "Appending reflexive UDP address to ANS_KEY from %s to %s", from->name, to->name);
-			sockaddr2str(&from->address, &reflexive_address, &reflexive_port);
-			send_request(mesh, to->nexthop->connection, NULL, "%s %s %s", request, reflexive_address, reflexive_port);
-			free(reflexive_address);
-			free(reflexive_port);
-			return true;
-		}
-
 		return send_request(mesh, to->nexthop->connection, NULL, "%s", request);
 	}
 
@@ -429,29 +418,7 @@ bool ans_key_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 
 	if(from == mesh->self) {
 		if(*key == '.' && *address && *port) {
-			logger(mesh, MESHLINK_DEBUG, "Learned our own reflexive UDP address from %s: %s port %s", c->name, address, port);
-
-			/* Inform all other nodes we want to communicate with and which are reachable via this connection */
-			for splay_each(node_t, n, mesh->nodes) {
-				if(n->nexthop != c->node) {
-					continue;
-				}
-
-				if(n->status.udp_confirmed) {
-					continue;
-				}
-
-				if(!n->status.waitingforkey && !n->status.validkey) {
-					continue;
-				}
-
-				if(!n->nexthop->connection) {
-					continue;
-				}
-
-				logger(mesh, MESHLINK_DEBUG, "Forwarding our own reflexive UDP address to %s", n->name);
-				send_request(mesh, c, NULL, "%d %s %s . -1 -1 -1 0 %s %s", ANS_KEY, mesh->self->name, n->name, address, port);
-			}
+			/* Ignore reflexive UDP address */
 		} else {
 			logger(mesh, MESHLINK_WARNING, "Got %s from %s from %s to %s",
 			       "ANS_KEY", c->name, from_name, to_name);
@@ -482,12 +449,8 @@ bool ans_key_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 
 	if(from->status.validkey) {
 		if(*address && *port) {
-			logger(mesh, MESHLINK_DEBUG, "Using reflexive UDP address from %s: %s port %s", from->name, address, port);
-			sockaddr_t sa = str2sockaddr(address, port);
-			update_node_udp(mesh, from, &sa);
+			/* Ignore reflexive UDP address */
 		}
-
-		send_mtu_probe(mesh, from);
 	}
 
 	return true;

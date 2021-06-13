@@ -100,9 +100,6 @@ void open_meshlink_pair(meshlink_handle_t **pa, meshlink_handle_t **pb, const ch
 	free(a_name);
 	free(b_name);
 
-	meshlink_enable_discovery(a, false);
-	meshlink_enable_discovery(b, false);
-
 	link_meshlink_pair(a, b);
 
 	*pa = a;
@@ -119,9 +116,6 @@ void open_meshlink_pair_ephemeral(meshlink_handle_t **pa, meshlink_handle_t **pb
 
 	assert(a);
 	assert(b);
-
-	meshlink_enable_discovery(a, false);
-	meshlink_enable_discovery(b, false);
 
 	link_meshlink_pair(a, b);
 

@@ -43,31 +43,11 @@ int main(void) {
 	assert(self);
 	assert(!strcmp(self->name, "foo"));
 
-	// Check that we are not reachable.
-
-	time_t last_reachable;
-	time_t last_unreachable;
-	assert(!meshlink_get_node_reachability(mesh, self, &last_reachable, &last_unreachable));
-	assert(!last_reachable);
-	assert(!last_unreachable);
-
 	// Start and stop the mesh.
 
 	assert(meshlink_start(mesh));
 
-	// Check that we are now reachable
-
-	assert(meshlink_get_node_reachability(mesh, self, &last_reachable, &last_unreachable));
-	assert(last_reachable);
-	assert(!last_unreachable);
-
 	meshlink_stop(mesh);
-
-	// Check that we are no longer reachable.
-
-	assert(!meshlink_get_node_reachability(mesh, self, &last_reachable, &last_unreachable));
-	assert(last_reachable);
-	assert(last_unreachable);
 
 	// Make sure we can start and stop the mesh again.
 
@@ -91,12 +71,6 @@ int main(void) {
 	assert(self);
 	assert(!strcmp(mesh->name, "foo"));
 	assert(!strcmp(self->name, "foo"));
-
-	// Check that we remembered we were reachable
-
-	assert(!meshlink_get_node_reachability(mesh, self, &last_reachable, &last_unreachable));
-	assert(last_reachable);
-	assert(last_unreachable);
 
 	// Check that the name is ignored now, and that we still are "foo".
 

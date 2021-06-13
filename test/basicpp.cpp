@@ -24,10 +24,6 @@ int main(void) {
 		assert(self);
 		assert(!strcmp(self->name, "foo"));
 
-		// Disable local discovery.
-
-		mesh.enable_discovery(false);
-
 		// Start and stop the mesh.
 
 		assert(mesh.start());
@@ -54,8 +50,6 @@ int main(void) {
 		assert(!strcmp(self->name, "foo"));
 
 		// Start and stop the mesh.
-
-		mesh.enable_discovery(false);
 
 		assert(mesh.start());
 		mesh.stop();

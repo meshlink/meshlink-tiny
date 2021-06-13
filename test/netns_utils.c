@@ -55,8 +55,6 @@ static void create_peers(peer_config_t *peers, int npeers, const char *prefix) {
 		assert(peers[i].mesh);
 		free(params);
 		free(conf_path);
-
-		meshlink_enable_discovery(peers[i].mesh, false);
 	}
 }
 

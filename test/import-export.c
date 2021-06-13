@@ -48,11 +48,6 @@ int main(void) {
 	meshlink_handle_t *mesh2 = meshlink_open("import_export_conf.2", "bar", "import-export", DEV_CLASS_BACKBONE);
 	assert(mesh2);
 
-	// Disable local discovery
-
-	meshlink_enable_discovery(mesh1, false);
-	meshlink_enable_discovery(mesh2, false);
-
 	// Import and export both side's data
 
 	assert(meshlink_set_canonical_address(mesh1, meshlink_get_self(mesh1), "localhost", NULL));

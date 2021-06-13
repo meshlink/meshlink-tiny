@@ -44,7 +44,6 @@ typedef struct connection_status_t {
 } connection_status_t;
 
 #include "ecdsa.h"
-#include "edge.h"
 #include "net.h"
 #include "node.h"
 #include "submesh.h"
@@ -71,7 +70,6 @@ typedef struct connection_t {
 
 	struct outgoing_t *outgoing;    /* used to keep track of outgoing connections */
 
-	struct edge_t *edge;            /* edge associated with this connection */
 	struct submesh_t *submesh;      /* his submesh handle if available in invitation file */
 
 	// Only used during authentication

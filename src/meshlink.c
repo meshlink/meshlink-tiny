@@ -37,9 +37,7 @@
 #include "utils.h"
 #include "xalloc.h"
 #include "ed25519/sha512.h"
-#include "discovery.h"
 #include "devtools.h"
-#include "graph.h"
 
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0
@@ -464,18 +462,7 @@ static bool try_bind(meshlink_handle_t *mesh, int port) {
 			}
 		}
 
-		/* If TCP worked, then we require that UDP works as well. */
-
-		int udp_fd = setup_udp_listen_socket(mesh, aip);
-
-		if(udp_fd == -1) {
-			closesocket(tcp_fd);
-			success = false;
-			break;
-		}
-
 		closesocket(tcp_fd);
-		closesocket(udp_fd);
 		success = true;
 	}
 
@@ -655,10 +642,6 @@ static bool finalize_join(join_state_t *state, const void *buf, uint16_t len) {
 				node_add_recent_address(mesh, n, &sa);
 			}
 		}
-
-		/* Clear the reachability times, since we ourself have never seen these nodes yet */
-		n->last_reachable = 0;
-		n->last_unreachable = 0;
 
 		if(!node_write_config(mesh, n, true)) {
 			free_node(n);
@@ -1369,7 +1352,6 @@ meshlink_handle_t *meshlink_open_ex(const meshlink_open_params_t *params) {
 
 	mesh->appname = xstrdup(params->appname);
 	mesh->devclass = params->devclass;
-	mesh->discovery.enabled = true;
 	mesh->netns = params->netns;
 	mesh->submeshes = NULL;
 	mesh->log_cb = global_log_cb;
@@ -1545,10 +1527,6 @@ static void *meshlink_main_loop(void *arg) {
 #endif // HAVE_SETNS
 	}
 
-	if(mesh->discovery.enabled) {
-		discovery_start(mesh);
-	}
-
 	if(pthread_mutex_lock(&mesh->mutex) != 0) {
 		abort();
 	}
@@ -1559,11 +1537,6 @@ static void *meshlink_main_loop(void *arg) {
 	logger(mesh, MESHLINK_DEBUG, "main_loop returned.\n");
 
 	pthread_mutex_unlock(&mesh->mutex);
-
-	// Stop discovery
-	if(mesh->discovery.enabled) {
-		discovery_stop(mesh);
-	}
 
 	return NULL;
 }
@@ -1636,9 +1609,6 @@ bool meshlink_start(meshlink_handle_t *mesh) {
 	pthread_cond_wait(&mesh->cond, &mesh->mutex);
 	mesh->threadstarted = true;
 
-	// Ensure we are considered reachable
-	graph(mesh);
-
 	pthread_mutex_unlock(&mesh->mutex);
 	return true;
 }
@@ -1658,20 +1628,7 @@ void meshlink_stop(meshlink_handle_t *mesh) {
 	// Shut down the main thread
 	event_loop_stop(&mesh->loop);
 
-	// Send ourselves a UDP packet to kick the event loop
-	for(int i = 0; i < mesh->listen_sockets; i++) {
-		sockaddr_t sa;
-		socklen_t salen = sizeof(sa);
-
-		if(getsockname(mesh->listen_socket[i].udp.fd, &sa.sa, &salen) == -1) {
-			logger(mesh, MESHLINK_ERROR, "System call `%s' failed: %s", "getsockname", sockstrerror(sockerrno));
-			continue;
-		}
-
-		if(sendto(mesh->listen_socket[i].udp.fd, "", 1, MSG_NOSIGNAL, &sa.sa, salen) == -1) {
-			logger(mesh, MESHLINK_ERROR, "Could not send a UDP packet to ourself: %s", sockstrerror(sockerrno));
-		}
-	}
+	// TODO: send something to a local socket to kick the event loop
 
 	if(mesh->threadstarted) {
 		// Wait for the main thread to finish
@@ -1700,11 +1657,6 @@ void meshlink_stop(meshlink_handle_t *mesh) {
 
 	exit_adns(mesh);
 	exit_outgoings(mesh);
-
-	// Ensure we are considered unreachable
-	if(mesh->nodes) {
-		graph(mesh);
-	}
 
 	// Try to write out any changed node config files, ignore errors at this point.
 	if(mesh->nodes) {
@@ -2289,26 +2241,6 @@ struct time_range {
 	time_t end;
 };
 
-static bool search_node_by_last_reachable(const node_t *node, const void *condition) {
-	const struct time_range *range = condition;
-	time_t start = node->last_reachable;
-	time_t end = node->last_unreachable;
-
-	if(end < start) {
-		end = time(NULL);
-
-		if(end < start) {
-			start = end;
-		}
-	}
-
-	if(range->end >= range->start) {
-		return start <= range->end && end >= range->start;
-	} else {
-		return start > range->start || end < range->end;
-	}
-}
-
 meshlink_node_t **meshlink_get_all_nodes_by_dev_class(meshlink_handle_t *mesh, dev_class_t devclass, meshlink_node_t **nodes, size_t *nmemb) {
 	if(!mesh || devclass < 0 || devclass >= DEV_CLASS_COUNT || !nmemb) {
 		meshlink_errno = MESHLINK_EINVAL;
@@ -2325,17 +2257,6 @@ meshlink_node_t **meshlink_get_all_nodes_by_submesh(meshlink_handle_t *mesh, mes
 	}
 
 	return meshlink_get_all_nodes_by_condition(mesh, submesh, nodes, nmemb, search_node_by_submesh);
-}
-
-meshlink_node_t **meshlink_get_all_nodes_by_last_reachable(meshlink_handle_t *mesh, time_t start, time_t end, meshlink_node_t **nodes, size_t *nmemb) {
-	if(!mesh || !nmemb) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return NULL;
-	}
-
-	struct time_range range = {start, end};
-
-	return meshlink_get_all_nodes_by_condition(mesh, &range, nodes, nmemb, search_node_by_last_reachable);
 }
 
 dev_class_t meshlink_get_node_dev_class(meshlink_handle_t *mesh, meshlink_node_t *node) {
@@ -2387,13 +2308,9 @@ bool meshlink_get_node_reachability(struct meshlink_handle *mesh, struct meshlin
 
 	reachable = n->status.reachable && !n->status.blacklisted;
 
-	if(last_reachable) {
-		*last_reachable = n->last_reachable;
-	}
-
-	if(last_unreachable) {
-		*last_unreachable = n->last_unreachable;
-	}
+	// TODO: handle reachable times?
+	(void)last_reachable;
+	(void)last_unreachable;
 
 	pthread_mutex_unlock(&mesh->mutex);
 
@@ -3074,10 +2991,6 @@ bool meshlink_import(meshlink_handle_t *mesh, const char *data) {
 			packmsg_input_invalidate(&in);
 			break;
 		}
-
-		/* Clear the reachability times, since we ourself have never seen these nodes yet */
-		n->last_reachable = 0;
-		n->last_unreachable = 0;
 
 		if(!node_write_config(mesh, n, true)) {
 			free_node(n);
@@ -4049,36 +3962,6 @@ void handle_duplicate_node(meshlink_handle_t *mesh, node_t *n) {
 	mesh->node_duplicate_cb(mesh, (meshlink_node_t *)n);
 }
 
-void meshlink_enable_discovery(meshlink_handle_t *mesh, bool enable) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_enable_discovery(%d)", enable);
-
-	if(!mesh) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	if(mesh->discovery.enabled == enable) {
-		goto end;
-	}
-
-	if(mesh->threadstarted) {
-		if(enable) {
-			discovery_start(mesh);
-		} else {
-			discovery_stop(mesh);
-		}
-	}
-
-	mesh->discovery.enabled = enable;
-
-end:
-	pthread_mutex_unlock(&mesh->mutex);
-}
-
 void meshlink_hint_network_change(struct meshlink_handle *mesh) {
 	logger(mesh, MESHLINK_DEBUG, "meshlink_hint_network_change()");
 
@@ -4089,15 +3972,6 @@ void meshlink_hint_network_change(struct meshlink_handle *mesh) {
 
 	if(pthread_mutex_lock(&mesh->mutex) != 0) {
 		abort();
-	}
-
-	if(mesh->discovery.enabled) {
-		scan_ifaddrs(mesh);
-	}
-
-	if(mesh->loop.now.tv_sec > mesh->discovery.last_update + 5) {
-		mesh->discovery.last_update = mesh->loop.now.tv_sec;
-		handle_network_change(mesh, 1);
 	}
 
 	pthread_mutex_unlock(&mesh->mutex);
@@ -4180,10 +4054,6 @@ void meshlink_reset_timers(struct meshlink_handle *mesh) {
 
 	handle_network_change(mesh, true);
 
-	if(mesh->discovery.enabled) {
-		discovery_refresh(mesh);
-	}
-
 	pthread_mutex_unlock(&mesh->mutex);
 }
 
@@ -4200,28 +4070,6 @@ void meshlink_set_inviter_commits_first(struct meshlink_handle *mesh, bool invit
 	}
 
 	mesh->inviter_commits_first = inviter_commits_first;
-	pthread_mutex_unlock(&mesh->mutex);
-}
-
-void meshlink_set_external_address_discovery_url(struct meshlink_handle *mesh, const char *url) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_set_external_address_discovery_url(%s)", url ? url : "(null)");
-
-	if(!mesh) {
-		meshlink_errno = EINVAL;
-		return;
-	}
-
-	if(url && (strncmp(url, "http://", 7) || strchr(url, ' '))) {
-		meshlink_errno = EINVAL;
-		return;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	free(mesh->external_address_url);
-	mesh->external_address_url = url ? xstrdup(url) : NULL;
 	pthread_mutex_unlock(&mesh->mutex);
 }
 

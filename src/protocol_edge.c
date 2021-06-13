@@ -21,8 +21,6 @@
 
 #include "conf.h"
 #include "connection.h"
-#include "edge.h"
-#include "graph.h"
 #include "logger.h"
 #include "meshlink_internal.h"
 #include "meta.h"
@@ -34,6 +32,7 @@
 #include "xalloc.h"
 #include "submesh.h"
 
+#if 0
 bool send_add_edge(meshlink_handle_t *mesh, connection_t *c, const edge_t *e, int contradictions) {
 	bool x;
 	char *address, *port;
@@ -82,11 +81,15 @@ bool send_add_edge(meshlink_handle_t *mesh, connection_t *c, const edge_t *e, in
 
 	return x;
 }
+#endif
 
 bool add_edge_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 	assert(request);
 	assert(*request);
 
+	(void)mesh;
+	(void)c;
+#if 0
 	edge_t *e;
 	node_t *from, *to;
 	char from_name[MAX_STRING_SIZE];
@@ -255,10 +258,13 @@ bool add_edge_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 	/* Tell the rest about the new edge */
 
 	forward_request(mesh, c, s, request);
+#endif
 
+	/* TODO: Check if this is an edge we would own */
 	return true;
 }
 
+#if 0
 bool send_del_edge(meshlink_handle_t *mesh, connection_t *c, const edge_t *e, int contradictions) {
 	submesh_t *s = NULL;
 
@@ -286,11 +292,15 @@ bool send_del_edge(meshlink_handle_t *mesh, connection_t *c, const edge_t *e, in
 	return send_request(mesh, c, s, "%d %x %s %s %d %x", DEL_EDGE, prng(mesh, UINT_MAX),
 	                    e->from->name, e->to->name, contradictions, e->session_id);
 }
+#endif
 
 bool del_edge_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 	assert(request);
 	assert(*request);
 
+	(void)mesh;
+	(void)c;
+#if 0
 	edge_t *e;
 	char from_name[MAX_STRING_SIZE];
 	char to_name[MAX_STRING_SIZE];
@@ -380,5 +390,8 @@ bool del_edge_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 		}
 	}
 
+#endif
+
+	/* TODO: Check if this is an edge we would own. */
 	return true;
 }

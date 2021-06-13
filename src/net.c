@@ -23,7 +23,6 @@
 #include "conf.h"
 #include "connection.h"
 #include "devtools.h"
-#include "graph.h"
 #include "logger.h"
 #include "meshlink_internal.h"
 #include "meta.h"
@@ -47,11 +46,12 @@ static const int default_interval = 60;
 /*
   Terminate a connection:
   - Mark it as inactive
-  - Remove the edge representing this connection
   - Kill it with fire
   - Check if we need to retry making an outgoing connection
 */
 void terminate_connection(meshlink_handle_t *mesh, connection_t *c, bool report) {
+	(void)report;
+
 	if(c->status.active) {
 		logger(mesh, MESHLINK_INFO, "Closing connection with %s", c->name);
 	}
@@ -65,31 +65,6 @@ void terminate_connection(meshlink_handle_t *mesh, connection_t *c, bool report)
 	}
 
 	c->status.active = false;
-
-	if(c->edge) {
-		if(report) {
-			send_del_edge(mesh, mesh->everyone, c->edge, 0);
-		}
-
-		edge_del(mesh, c->edge);
-		c->edge = NULL;
-
-		/* Run MST and SSSP algorithms */
-
-		graph(mesh);
-
-		/* If the node is not reachable anymore but we remember it had an edge to us, clean it up */
-
-		if(report && c->node && !c->node->status.reachable) {
-			edge_t *e;
-			e = lookup_edge(c->node, mesh->self);
-
-			if(e) {
-				send_del_edge(mesh, mesh->everyone, e, 0);
-				edge_del(mesh, e);
-			}
-		}
-	}
 
 	outgoing_t *outgoing = c->outgoing;
 	connection_del(mesh, c);

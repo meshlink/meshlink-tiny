@@ -25,8 +25,6 @@ int main(void) {
 	mesh2 = meshlink_open("storage-policy_conf.2", "bar", "storage-policy", DEV_CLASS_BACKBONE);
 	assert(mesh1);
 	assert(mesh2);
-	meshlink_enable_discovery(mesh1, false);
-	meshlink_enable_discovery(mesh2, false);
 	meshlink_set_storage_policy(mesh1, MESHLINK_STORAGE_DISABLED);
 	meshlink_set_storage_policy(mesh2, MESHLINK_STORAGE_DISABLED);
 
@@ -56,8 +54,6 @@ int main(void) {
 	mesh2 = meshlink_open("storage-policy_conf.2", "bar", "storage-policy", DEV_CLASS_BACKBONE);
 	assert(mesh1);
 	assert(mesh2);
-	meshlink_enable_discovery(mesh1, false);
-	meshlink_enable_discovery(mesh2, false);
 	meshlink_set_storage_policy(mesh1, MESHLINK_STORAGE_KEYS_ONLY);
 	meshlink_set_storage_policy(mesh2, MESHLINK_STORAGE_KEYS_ONLY);
 
@@ -82,8 +78,6 @@ int main(void) {
 	mesh2 = meshlink_open("storage-policy_conf.2", "bar", "storage-policy", DEV_CLASS_BACKBONE);
 	assert(mesh1);
 	assert(mesh2);
-	meshlink_enable_discovery(mesh1, false);
-	meshlink_enable_discovery(mesh2, false);
 	meshlink_set_storage_policy(mesh1, MESHLINK_STORAGE_KEYS_ONLY);
 	meshlink_set_storage_policy(mesh2, MESHLINK_STORAGE_KEYS_ONLY);
 
@@ -115,8 +109,6 @@ int main(void) {
 	mesh2 = meshlink_open("storage-policy_conf.2", "bar", "storage-policy", DEV_CLASS_BACKBONE);
 	assert(mesh1);
 	assert(mesh2);
-	meshlink_enable_discovery(mesh1, false);
-	meshlink_enable_discovery(mesh2, false);
 	meshlink_set_storage_policy(mesh1, MESHLINK_STORAGE_KEYS_ONLY);
 	meshlink_set_storage_policy(mesh2, MESHLINK_STORAGE_KEYS_ONLY);
 
@@ -141,8 +133,6 @@ int main(void) {
 	mesh2 = meshlink_open("storage-policy_conf.2", "bar", "storage-policy", DEV_CLASS_BACKBONE);
 	assert(mesh1);
 	assert(mesh2);
-	meshlink_enable_discovery(mesh1, false);
-	meshlink_enable_discovery(mesh2, false);
 
 	assert(!meshlink_get_node_reachability(mesh1, meshlink_get_node(mesh1, "bar"), &last_reachable, &last_unreachable));
 	assert(last_reachable);
@@ -156,8 +146,6 @@ int main(void) {
 	mesh2 = meshlink_open("storage-policy_conf.2", "bar", "storage-policy", DEV_CLASS_BACKBONE);
 	assert(mesh1);
 	assert(mesh2);
-	meshlink_enable_discovery(mesh1, false);
-	meshlink_enable_discovery(mesh2, false);
 	meshlink_set_storage_policy(mesh1, MESHLINK_STORAGE_KEYS_ONLY);
 	meshlink_set_storage_policy(mesh2, MESHLINK_STORAGE_KEYS_ONLY);
 

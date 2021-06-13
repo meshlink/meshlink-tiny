@@ -47,7 +47,6 @@ static const char meshlink_udp_label[] = "MeshLink UDP";
 
 typedef struct listen_socket_t {
 	struct io_t tcp;
-	struct io_t udp;
 	sockaddr_t sa;
 	sockaddr_t broadcast_sa;
 } listen_socket_t;
@@ -100,10 +99,7 @@ struct meshlink_handle {
 	meshlink_queue_t outpacketqueue;
 	signal_t datafromapp;
 
-	hash_t *node_udp_cache;
-
 	struct splay_tree_t *nodes;
-	struct splay_tree_t *edges;
 
 	struct list_t *connections;
 	struct list_t *outgoings;
@@ -148,8 +144,6 @@ struct meshlink_handle {
 
 	dev_class_t devclass;
 
-	int udp_choice;
-
 	dev_class_traits_t dev_class_traits[DEV_CLASS_COUNT];
 
 	int netns;
@@ -167,22 +161,6 @@ struct meshlink_handle {
 	pthread_t thread;
 	pthread_cond_t cond;
 	bool threadstarted;
-
-	// mDNS discovery
-	struct {
-		bool enabled;
-		io_t pfroute_io;
-		int *ifaces;
-		struct discovery_address *addresses;
-		int iface_count;
-		int address_count;
-		io_t sockets[2];
-		time_t last_update;
-#ifdef __APPLE__
-		pthread_t thread;
-		void *runloop;
-#endif
-	} discovery;
 
 	// ADNS
 	pthread_t adns_thread;

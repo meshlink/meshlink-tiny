@@ -53,19 +53,9 @@ int main(void) {
 	assert(nnodes == 1);
 	assert(nodes[0] == meshlink_get_self(mesh[0]));
 
-	// We should never have been online.
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 0, -1, nodes, &nnodes);
-	assert(nnodes == 0);
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 0, 0, nodes, &nnodes);
-	assert(nnodes == 1);
-	assert(nodes[0] == meshlink_get_self(mesh[0]));
-
 	// Let nodes know about each other.
 
 	for(int i = 0; i < 3; i++) {
-		meshlink_enable_discovery(mesh[i], false);
 		assert(meshlink_set_canonical_address(mesh[i], meshlink_get_self(mesh[i]), "localhost", NULL));
 		char *data = meshlink_export(mesh[i]);
 		assert(data);
@@ -93,36 +83,10 @@ int main(void) {
 	nodes = meshlink_get_all_nodes_by_dev_class(mesh[0], DEV_CLASS_STATIONARY, nodes, &nnodes);
 	assert(nnodes == 2);
 
-	// But no node should have been online.
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 0, -1, nodes, &nnodes);
-	assert(nnodes == 0);
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 0, 0, nodes, &nnodes);
-	assert(nnodes == 3);
-
 	// Start foo.
 
 	time_t foo_started = time(NULL);
 	assert(meshlink_start(mesh[0]));
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 0, -1, nodes, &nnodes);
-	assert(nnodes == 1);
-	assert(nodes[0] == meshlink_get_self(mesh[0]));
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 0, 0, nodes, &nnodes);
-	assert(nnodes == 2);
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], foo_started - 1, -1, nodes, &nnodes);
-	assert(nnodes == 1);
-	assert(nodes[0] == meshlink_get_self(mesh[0]));
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 1, foo_started - 1, nodes, &nnodes);
-	assert(nnodes == 0);
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 1, foo_started + 1, nodes, &nnodes);
-	assert(nnodes == 1);
-	assert(nodes[0] == meshlink_get_self(mesh[0]));
 
 	// Start bar and wait for it to connect.
 
@@ -133,46 +97,15 @@ int main(void) {
 	assert(wait_sync_flag(&bar_reachable, 20));
 	time_t bar_started = time(NULL);
 
-	// Validate time ranges.
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 0, -1, nodes, &nnodes);
-	assert(nnodes == 2);
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 0, 0, nodes, &nnodes);
-	assert(nnodes == 1);
-	assert(nodes[0] == meshlink_get_node(mesh[0], "baz"));
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 1, foo_started + 1, nodes, &nnodes);
-	assert(nnodes == 1);
-	assert(nodes[0] == meshlink_get_self(mesh[0]));
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], bar_started, bar_started, nodes, &nnodes);
-	assert(nnodes == 2);
-	assert(nodes[0] == meshlink_get_node(mesh[0], "bar"));
-	assert(nodes[1] == meshlink_get_self(mesh[0]));
-
 	// Stop bar.
 
 	meshlink_stop(mesh[1]);
 	sleep(2);
-	time_t bar_stopped = time(NULL);
-
-	// Validate we can see when bar was reachable.
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], bar_stopped, bar_stopped, nodes, &nnodes);
-	assert(nnodes == 1);
-	assert(nodes[0] == meshlink_get_self(mesh[0]));
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], bar_started, bar_started, nodes, &nnodes);
-	assert(nnodes == 2);
-	assert(nodes[0] == meshlink_get_node(mesh[0], "bar"));
-	assert(nodes[1] == meshlink_get_self(mesh[0]));
 
 	// Close and restart foo, check that it remembers correctly.
 
 	meshlink_close(mesh[0]);
 	sleep(2);
-	time_t foo_stopped = time(NULL);
 	mesh[0] = meshlink_open("get_all_nodes_conf.1", "foo", "get-all_nodes", DEV_CLASS_BACKBONE);
 	assert(mesh[0]);
 
@@ -185,32 +118,6 @@ int main(void) {
 
 	nodes = meshlink_get_all_nodes_by_dev_class(mesh[0], DEV_CLASS_STATIONARY, nodes, &nnodes);
 	assert(nnodes == 2);
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 0, 0, nodes, &nnodes);
-	assert(nnodes == 1);
-	assert(nodes[0] == meshlink_get_node(mesh[0], "baz"));
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 0, -1, nodes, &nnodes);
-	assert(nnodes == 2);
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 1, foo_started - 1, nodes, &nnodes);
-	assert(nnodes == 0);
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], 1, foo_started + 1, nodes, &nnodes);
-	assert(nnodes == 1);
-	assert(nodes[0] == meshlink_get_self(mesh[0]));
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], bar_started, bar_started, nodes, &nnodes);
-	assert(nnodes == 2);
-	assert(nodes[0] == meshlink_get_node(mesh[0], "bar"));
-	assert(nodes[1] == meshlink_get_self(mesh[0]));
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], bar_stopped, bar_stopped, nodes, &nnodes);
-	assert(nnodes == 1);
-	assert(nodes[0] == meshlink_get_self(mesh[0]));
-
-	nodes = meshlink_get_all_nodes_by_last_reachable(mesh[0], foo_stopped, -1, nodes, &nnodes);
-	assert(nnodes == 0);
 
 	// Clean up.
 

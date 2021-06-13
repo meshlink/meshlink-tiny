@@ -23,8 +23,6 @@
 #include "connection.h"
 #include "devtools.h"
 #include "ecdsa.h"
-#include "edge.h"
-#include "graph.h"
 #include "logger.h"
 #include "meshlink_internal.h"
 #include "meta.h"
@@ -148,16 +146,6 @@ bool send_ack(meshlink_handle_t *mesh, connection_t *c) {
 	return send_request(mesh, c, NULL, "%d %s %d %x", ACK, mesh->myport, mesh->devclass, OPTION_PMTU_DISCOVERY | (PROT_MINOR << 24));
 }
 
-static void send_everything(meshlink_handle_t *mesh, connection_t *c) {
-	/* Send all known subnets and edges */
-
-	for splay_each(node_t, n, mesh->nodes) {
-		for inner_splay_each(edge_t, e, n->edge_tree) {
-			send_add_edge(mesh, c, e, 0);
-		}
-	}
-}
-
 bool ack_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 	assert(request);
 	assert(*request);
@@ -199,10 +187,6 @@ bool ack_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 
 				n->connection->outgoing = NULL;
 			}
-
-			/* Remove the edge before terminating the connection, to prevent a graph update. */
-			edge_del(mesh, n->connection->edge);
-			n->connection->edge = NULL;
 
 			terminate_connection(mesh, n->connection, false);
 		}
@@ -248,31 +232,7 @@ bool ack_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 		}
 	}
 
-	/* Send him everything we know */
-
-	send_everything(mesh, c);
-
-	/* Create an edge_t for this connection */
-
-	assert(devclass >= 0 && devclass < DEV_CLASS_COUNT);
-
-	c->edge = new_edge();
-	c->edge->from = mesh->self;
-	c->edge->to = n;
-	sockaddrcpy_setport(&c->edge->address, &c->address, atoi(hisport));
-	c->edge->weight = mesh->dev_class_traits[devclass].edge_weight;
-	c->edge->connection = c;
-
-	node_add_recent_address(mesh, n, &c->address);
-	edge_add(mesh, c->edge);
-
-	/* Notify everyone of the new edge */
-
-	send_add_edge(mesh, mesh->everyone, c->edge, 0);
-
-	/* Run MST and SSSP algorithms */
-
-	graph(mesh);
+	/* TODO: Create an edge_t for this connection, send it */
 
 	/* Request a session key to jump start UDP traffic */
 

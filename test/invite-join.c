@@ -72,12 +72,6 @@ int main(void) {
 	meshlink_handle_t *mesh3 = meshlink_open("invite_join_conf.3", "quux", "invite-join", DEV_CLASS_BACKBONE);
 	assert(mesh3);
 
-	// Disable local discovery.
-
-	meshlink_enable_discovery(mesh1, false);
-	meshlink_enable_discovery(mesh2, false);
-	meshlink_enable_discovery(mesh3, false);
-
 	// Have the first instance generate invitations.
 
 	meshlink_set_node_status_cb(mesh1, status_cb);

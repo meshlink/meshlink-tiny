@@ -70,7 +70,6 @@ typedef struct past_request_t {
 #define MAX_STRING_SIZE 2049
 #define MAX_STRING "%2048s"
 
-#include "edge.h"
 #include "net.h"
 #include "node.h"
 
@@ -92,8 +91,6 @@ bool send_ack(struct meshlink_handle *mesh, struct connection_t *);
 bool send_error(struct meshlink_handle *mesh, struct connection_t *, request_error_t, const char *);
 bool send_ping(struct meshlink_handle *mesh, struct connection_t *);
 bool send_pong(struct meshlink_handle *mesh, struct connection_t *);
-bool send_add_edge(struct meshlink_handle *mesh, struct connection_t *, const struct edge_t *, int contradictions);
-bool send_del_edge(struct meshlink_handle *mesh, struct connection_t *, const struct edge_t *, int contradictions);
 bool send_req_key(struct meshlink_handle *mesh, struct node_t *);
 bool send_canonical_address(struct meshlink_handle *mesh, struct node_t *);
 

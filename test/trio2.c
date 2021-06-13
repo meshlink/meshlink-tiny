@@ -105,13 +105,6 @@ int main(void) {
 	assert(wait_sync_flag(&bar_learned_baz, 5));
 	assert(wait_sync_flag(&baz_learned_bar, 5));
 
-	// Check that the second and third node autoconnect to each other
-
-	devtool_edge_t *edges = NULL;
-	size_t nedges = 0;
-	assert_after((edges = devtool_get_all_edges(mesh[1], edges, &nedges), nedges == 3), 15);
-	free(edges);
-
 	// Stop the nodes nodes
 
 	for(int i = 0; i < 3; i++) {
