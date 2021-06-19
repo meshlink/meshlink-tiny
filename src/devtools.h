@@ -111,9 +111,6 @@ extern void (*devtool_trybind_probe)(void);
  */
 extern void (*devtool_keyrotate_probe)(int stage);
 
-/// Debug function pointer variable for asynchronous DNS resolving
-extern void (*devtool_adns_resolve_probe)(void);
-
 /// Debug function pointer variable for SPTPS key renewal
 /** This function pointer variable is a userspace tracepoint or debugger callback for
  *  SPTPS key renewal.

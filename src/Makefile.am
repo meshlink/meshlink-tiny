@@ -37,7 +37,6 @@ pkginclude_HEADERS = meshlink-tiny++.h meshlink-tiny.h
 libmeshlink_tiny_la_LDFLAGS = -export-symbols $(srcdir)/meshlink.sym
 
 libmeshlink_tiny_la_SOURCES = \
-	adns.c adns.h \
 	buffer.c buffer.h \
 	conf.c conf.h \
 	connection.c connection.h \

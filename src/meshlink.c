@@ -20,7 +20,6 @@
 #include "system.h"
 #include <pthread.h>
 
-#include "adns.h"
 #include "crypto.h"
 #include "ecdsagen.h"
 #include "logger.h"
@@ -244,7 +243,7 @@ char *meshlink_get_external_address_for_family(meshlink_handle_t *mesh, int fami
 	}
 
 	logger(mesh, MESHLINK_DEBUG, "Trying to discover externally visible hostname...\n");
-	struct addrinfo *ai = adns_blocking_request(mesh, xstrdup(host), xstrdup(port ? port : "80"), SOCK_STREAM, 5);
+	struct addrinfo *ai = str2addrinfo(host, port ? port : "80", SOCK_STREAM);
 	char line[256];
 	char *hostname = NULL;
 
@@ -1391,8 +1390,6 @@ meshlink_handle_t *meshlink_open_ex(const meshlink_open_params_t *params) {
 	pthread_mutex_init(&mesh->mutex, &attr);
 	pthread_cond_init(&mesh->cond, NULL);
 
-	pthread_cond_init(&mesh->adns_cond, NULL);
-
 	mesh->threadstarted = false;
 	event_loop_init(&mesh->loop);
 	mesh->loop.data = mesh;
@@ -1586,7 +1583,6 @@ bool meshlink_start(meshlink_handle_t *mesh) {
 	}
 
 	init_outgoings(mesh);
-	init_adns(mesh);
 
 	// Start the main thread
 
@@ -1655,7 +1651,6 @@ void meshlink_stop(meshlink_handle_t *mesh) {
 		}
 	}
 
-	exit_adns(mesh);
 	exit_outgoings(mesh);
 
 	// Try to write out any changed node config files, ignore errors at this point.
@@ -2684,7 +2679,7 @@ bool meshlink_join(meshlink_handle_t *mesh, const char *invitation) {
 		}
 
 		// Connect to the meshlink daemon mentioned in the URL.
-		struct addrinfo *ai = adns_blocking_request(mesh, xstrdup(address), xstrdup(port), SOCK_STREAM, 30);
+		struct addrinfo *ai = str2addrinfo(address, port, SOCK_STREAM);
 
 		if(ai) {
 			for(struct addrinfo *aip = ai; aip; aip = aip->ai_next) {

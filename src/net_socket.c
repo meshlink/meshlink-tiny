@@ -19,7 +19,6 @@
 
 #include "system.h"
 
-#include "adns.h"
 #include "conf.h"
 #include "connection.h"
 #include "list.h"
@@ -214,28 +213,6 @@ static void free_known_addresses(struct addrinfo *ai) {
 	}
 }
 
-static void canonical_resolve_cb(meshlink_handle_t *mesh, char *host, char *serv, void *data, struct addrinfo *ai, int err) {
-	(void)serv;
-	(void)err;
-	node_t *n = data;
-
-	free(host);
-	free(serv);
-
-	for list_each(outgoing_t, outgoing, mesh->outgoings) {
-		if(outgoing->node == n) {
-			if(outgoing->state == OUTGOING_CANONICAL_RESOLVE) {
-				outgoing->ai = ai;
-				outgoing->aip = NULL;
-				outgoing->state = OUTGOING_CANONICAL;
-				do_outgoing_connection(mesh, outgoing);
-			}
-
-			return;
-		}
-	}
-}
-
 static bool get_next_outgoing_address(meshlink_handle_t *mesh, outgoing_t *outgoing) {
 	(void)mesh;
 
@@ -255,15 +232,15 @@ static bool get_next_outgoing_address(meshlink_handle_t *mesh, outgoing_t *outgo
 
 			if(port) {
 				*port++ = 0;
-				port = xstrdup(port);
-				adns_queue(mesh, address, port, canonical_resolve_cb, outgoing->node, 2);
-				return false;
+				outgoing->ai = str2addrinfo(address, port, SOCK_STREAM);
+				outgoing->aip = NULL;
+				outgoing->state = OUTGOING_CANONICAL;
 			} else {
 				logger(mesh, MESHLINK_ERROR, "Canonical address for %s is missing port number", n->name);
-				free(address);
 				outgoing->state = OUTGOING_RECENT;
 			}
 
+			free(address);
 		} else {
 			outgoing->state = OUTGOING_RECENT;
 		}

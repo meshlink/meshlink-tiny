@@ -52,7 +52,6 @@ static void sptps_renewal_nop_probe(meshlink_node_t *node) {
 void (*devtool_trybind_probe)(void) = nop_probe;
 void (*devtool_keyrotate_probe)(int stage) = keyrotate_nop_probe;
 void (*devtool_set_inviter_commits_first)(bool inviter_commited_first) = inviter_commits_first_nop_probe;
-void (*devtool_adns_resolve_probe)(void) = nop_probe;
 void (*devtool_sptps_renewal_probe)(meshlink_node_t *node) = sptps_renewal_nop_probe;
 
 void devtool_get_node_status(meshlink_handle_t *mesh, meshlink_node_t *node, devtool_node_status_t *status) {

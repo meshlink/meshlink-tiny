@@ -161,13 +161,6 @@ struct meshlink_handle {
 	pthread_t thread;
 	pthread_cond_t cond;
 	bool threadstarted;
-
-	// ADNS
-	pthread_t adns_thread;
-	pthread_cond_t adns_cond;
-	meshlink_queue_t adns_queue;
-	meshlink_queue_t adns_done_queue;
-	signal_t adns_signal;
 };
 
 /// A handle for a MeshLink node.
