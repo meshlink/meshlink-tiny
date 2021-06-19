@@ -45,20 +45,12 @@ bool key_changed_h(meshlink_handle_t *mesh, connection_t *c, const char *request
 		return false;
 	}
 
-	if(seen_request(mesh, request)) {
-		return true;
-	}
-
 	n = lookup_node(mesh, name);
 
 	if(!n) {
 		logger(mesh, MESHLINK_ERROR, "Got %s from %s origin %s which does not exist", "KEY_CHANGED", c->name, name);
 		return true;
 	}
-
-	/* Tell the others */
-
-	forward_request(mesh, c, request);
 
 	return true;
 }
@@ -394,24 +386,9 @@ bool ans_key_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 	/* Forward it if necessary */
 
 	if(to != mesh->self) {
-		if(!to->status.reachable) {
-			logger(mesh, MESHLINK_WARNING, "Got %s from %s destination %s which is not reachable",
-			       "ANS_KEY", c->name, to_name);
-			return true;
-		}
-
-		if(from == to) {
-			logger(mesh, MESHLINK_WARNING, "Got %s from %s from %s to %s",
-			       "ANS_KEY", c->name, from_name, to_name);
-			return true;
-		}
-
-		if(!to->nexthop || !to->nexthop->connection) {
-			logger(mesh, MESHLINK_WARNING, "Cannot forward ANS_KEY to %s via %s", to->name, to->nexthop ? to->nexthop->name : to->name);
-			return false;
-		}
-
-		return send_request(mesh, to->nexthop->connection, "%s", request);
+		logger(mesh, MESHLINK_WARNING, "Got %s from %s destination %s which is not for us",
+		       "ANS_KEY", c->name, to_name);
+		return true;
 	}
 
 	/* Is this an ANS_KEY informing us of our own reflexive UDP address? */

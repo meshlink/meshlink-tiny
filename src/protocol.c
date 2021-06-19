@@ -116,23 +116,6 @@ bool send_request(meshlink_handle_t *mesh, connection_t *c, const char *format, 
 	}
 }
 
-void forward_request(meshlink_handle_t *mesh, connection_t *from, const char *request) {
-	assert(from);
-	assert(request);
-	assert(*request);
-
-	logger(mesh, MESHLINK_DEBUG, "Forwarding %s from %s: %s", request_name[atoi(request)], from->name, request);
-
-	// Create a temporary newline-terminated copy of the request
-	int len = strlen(request);
-	char tmp[len + 1];
-
-	memcpy(tmp, request, len);
-	tmp[len] = '\n';
-
-	broadcast_meta(mesh, from, tmp, sizeof(tmp));
-}
-
 bool receive_request(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 	assert(request);
 
@@ -163,86 +146,4 @@ bool receive_request(meshlink_handle_t *mesh, connection_t *c, const char *reque
 	}
 
 	return true;
-}
-
-static int past_request_compare(const past_request_t *a, const past_request_t *b) {
-	return strcmp(a->request, b->request);
-}
-
-static void free_past_request(past_request_t *r) {
-	if(r->request) {
-		free((void *)r->request);
-	}
-
-	free(r);
-}
-
-static const int request_timeout = 60;
-
-static void age_past_requests(event_loop_t *loop, void *data) {
-	(void)data;
-	meshlink_handle_t *mesh = loop->data;
-	int left = 0, deleted = 0;
-
-	for splay_each(past_request_t, p, mesh->past_request_tree) {
-		if(p->firstseen + request_timeout <= mesh->loop.now.tv_sec) {
-			splay_delete_node(mesh->past_request_tree, splay_node), deleted++;
-		} else {
-			left++;
-		}
-	}
-
-	if(left || deleted) {
-		logger(mesh, MESHLINK_DEBUG, "Aging past requests: deleted %d, left %d", deleted, left);
-	}
-
-	if(left) {
-		timeout_set(&mesh->loop, &mesh->past_request_timeout, &(struct timespec) {
-			10, prng(mesh, TIMER_FUDGE)
-		});
-	}
-}
-
-bool seen_request(meshlink_handle_t *mesh, const char *request) {
-	assert(request);
-	assert(*request);
-
-	past_request_t *new, p = {.request = request};
-
-	if(splay_search(mesh->past_request_tree, &p)) {
-		logger(mesh, MESHLINK_DEBUG, "Already seen request");
-		return true;
-	} else {
-		new = xmalloc(sizeof(*new));
-		new->request = xstrdup(request);
-		new->firstseen = mesh->loop.now.tv_sec;
-
-		if(!mesh->past_request_tree->head && mesh->past_request_timeout.cb) {
-			timeout_set(&mesh->loop, &mesh->past_request_timeout, &(struct timespec) {
-				10, prng(mesh, TIMER_FUDGE)
-			});
-		}
-
-		splay_insert(mesh->past_request_tree, new);
-		return false;
-	}
-}
-
-void init_requests(meshlink_handle_t *mesh) {
-	assert(!mesh->past_request_tree);
-
-	mesh->past_request_tree = splay_alloc_tree((splay_compare_t) past_request_compare, (splay_action_t) free_past_request);
-	timeout_add(&mesh->loop, &mesh->past_request_timeout, age_past_requests, NULL, &(struct timespec) {
-		0, 0
-	});
-}
-
-void exit_requests(meshlink_handle_t *mesh) {
-	if(mesh->past_request_tree) {
-		splay_delete_tree(mesh->past_request_tree);
-	}
-
-	mesh->past_request_tree = NULL;
-
-	timeout_del(&mesh->loop, &mesh->past_request_timeout);
 }

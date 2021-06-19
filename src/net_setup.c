@@ -342,7 +342,6 @@ static bool setup_myself(meshlink_handle_t *mesh) {
 bool setup_network(meshlink_handle_t *mesh) {
 	init_connections(mesh);
 	init_nodes(mesh);
-	init_requests(mesh);
 
 	if(!setup_myself(mesh)) {
 		return false;
@@ -360,14 +359,10 @@ void close_network_connections(meshlink_handle_t *mesh) {
 		terminate_connection(mesh, mesh->connection, false);
 	}
 
-	exit_requests(mesh);
 	exit_nodes(mesh);
 	exit_connections(mesh);
 
 	free(mesh->myport);
 	mesh->myport = NULL;
-
 	mesh->self = NULL;
-
-	return;
 }

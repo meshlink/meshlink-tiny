@@ -57,11 +57,6 @@ typedef enum request_error_t {
 	BLACKLISTED = 1,
 } request_error_t;
 
-typedef struct past_request_t {
-	const char *request;
-	time_t firstseen;
-} past_request_t;
-
 /* Maximum size of strings in a request.
  * scanf terminates %2048s with a NUL character,
  * but the NUL character can be written after the 2048th non-NUL character.
@@ -76,13 +71,8 @@ typedef struct past_request_t {
 /* Basic functions */
 
 bool send_request(struct meshlink_handle *mesh, struct connection_t *, const char *, ...) __attribute__((__format__(printf, 3, 4)));
-void forward_request(struct meshlink_handle *mesh, struct connection_t *, const char *);
 bool receive_request(struct meshlink_handle *mesh, struct connection_t *, const char *);
 bool check_id(const char *);
-
-void init_requests(struct meshlink_handle *mesh);
-void exit_requests(struct meshlink_handle *mesh);
-bool seen_request(struct meshlink_handle *mesh, const char *);
 
 /* Requests */
 

@@ -97,10 +97,6 @@ struct meshlink_handle {
 	struct connection_t *connection;
 	struct outgoing_t *outgoing;
 
-	// Meta-connection-related members
-	struct splay_tree_t *past_request_tree;
-	timeout_t past_request_timeout;
-
 	int connection_burst;
 	int contradicting_add_edge;
 	int contradicting_del_edge;
