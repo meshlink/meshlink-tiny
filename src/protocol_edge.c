@@ -31,56 +31,20 @@
 #include "utils.h"
 #include "xalloc.h"
 
-#if 0
-bool send_add_edge(meshlink_handle_t *mesh, connection_t *c, const edge_t *e, int contradictions) {
-	bool x;
+bool send_add_edge(meshlink_handle_t *mesh, connection_t *c, int contradictions) {
 	char *address, *port;
-	const char *from_submesh, *to_submesh;
-	const submesh_t *s = NULL;
+	sockaddr2str(&c->address, &address, &port);
 
-	if(c->node && c->node->submesh) {
-		if(!submesh_allows_node(e->from->submesh, c->node)) {
-			return true;
-		}
+	bool result = send_request(mesh, c, "%d %x %s %d %s %s %s %s %d %s %x %d %d %x", ADD_EDGE, prng(mesh, UINT_MAX),
+	                           mesh->self->name, mesh->self->devclass, CORE_MESH,
+	                           mesh->peer->name, address, port,
+	                           mesh->peer->devclass, CORE_MESH, 0, 1000, contradictions, mesh->peer->session_id);
 
-		if(!submesh_allows_node(e->to->submesh, c->node)) {
-			return true;
-		}
-	}
-
-	if(e->from->submesh && e->to->submesh && (e->from->submesh != e->to->submesh)) {
-		return true;
-	}
-
-	sockaddr2str(&e->address, &address, &port);
-
-	if(e->from->submesh) {
-		from_submesh = e->from->submesh->name;
-	} else {
-		from_submesh = CORE_MESH;
-	}
-
-	if(e->to->submesh) {
-		to_submesh = e->to->submesh->name;
-	} else {
-		to_submesh = CORE_MESH;
-	}
-
-	if(e->from->submesh) {
-		s = e->from->submesh;
-	} else {
-		s = e->to->submesh;
-	}
-
-	x = send_request(mesh, c, s, "%d %x %s %d %s %s %s %s %d %s %x %d %d %x", ADD_EDGE, prng(mesh, UINT_MAX),
-	                 e->from->name, e->from->devclass, from_submesh, e->to->name, address, port,
-	                 e->to->devclass, to_submesh, OPTION_PMTU_DISCOVERY, e->weight, contradictions, e->from->session_id);
 	free(address);
 	free(port);
 
-	return x;
+	return result;
 }
-#endif
 
 bool add_edge_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 	assert(request);

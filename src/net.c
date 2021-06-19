@@ -62,6 +62,8 @@ void terminate_connection(meshlink_handle_t *mesh, connection_t *c, bool report)
 		}
 
 		c->node->connection = NULL;
+		c->node->status.reachable = false;
+		update_node_status(mesh, c->node);
 	}
 
 	c->status.active = false;

@@ -196,7 +196,9 @@ bool ack_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 		mesh->meta_status_cb(mesh, (meshlink_node_t *)n, true);
 	}
 
-	/* TODO: Create an edge_t for this connection, send it */
+	send_add_edge(mesh, c, 0);
+	n->status.reachable = true;
+	update_node_status(mesh, c->node);
 
 	/* Request a session key to jump start UDP traffic */
 
