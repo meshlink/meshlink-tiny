@@ -64,9 +64,9 @@ void broadcast_meta(meshlink_handle_t *mesh, connection_t *from, const char *buf
 	assert(buffer);
 	assert(length);
 
-	for list_each(connection_t, c, mesh->connections)
-		if(c != from && c->status.active) {
-			send_meta(mesh, c, buffer, length);
+	if(mesh->connection)
+		if(mesh->connection != from && mesh->connection->status.active) {
+			send_meta(mesh, mesh->connection, buffer, length);
 		}
 }
 

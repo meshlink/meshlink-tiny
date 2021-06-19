@@ -289,6 +289,22 @@ static bool get_next_outgoing_address(meshlink_handle_t *mesh, outgoing_t *outgo
 	return false;
 }
 
+static void free_outgoing(outgoing_t *outgoing) {
+	meshlink_handle_t *mesh = outgoing->node->mesh;
+
+	timeout_del(&mesh->loop, &outgoing->ev);
+
+	if(outgoing->ai) {
+		if(outgoing->state == OUTGOING_RECENT || outgoing->state == OUTGOING_KNOWN) {
+			free_known_addresses(outgoing->ai);
+		} else {
+			freeaddrinfo(outgoing->ai);
+		}
+	}
+
+	free(outgoing);
+}
+
 void do_outgoing_connection(meshlink_handle_t *mesh, outgoing_t *outgoing) {
 begin:
 
@@ -297,7 +313,8 @@ begin:
 			/* We are waiting for a callback from the ADNS thread */
 		} else if(outgoing->state == OUTGOING_NO_KNOWN_ADDRESSES) {
 			logger(mesh, MESHLINK_ERROR, "No known addresses for %s", outgoing->node->name);
-			list_delete(mesh->outgoings, outgoing);
+			free_outgoing(outgoing);
+			mesh->outgoing = NULL;
 		} else {
 			logger(mesh, MESHLINK_ERROR, "Could not set up a meta connection to %s", outgoing->node->name);
 			retry_outgoing(mesh, outgoing);
@@ -409,29 +426,13 @@ void setup_outgoing_connection(meshlink_handle_t *mesh, outgoing_t *outgoing) {
 	do_outgoing_connection(mesh, outgoing);
 }
 
-static void free_outgoing(outgoing_t *outgoing) {
-	meshlink_handle_t *mesh = outgoing->node->mesh;
-
-	timeout_del(&mesh->loop, &outgoing->ev);
-
-	if(outgoing->ai) {
-		if(outgoing->state == OUTGOING_RECENT || outgoing->state == OUTGOING_KNOWN) {
-			free_known_addresses(outgoing->ai);
-		} else {
-			freeaddrinfo(outgoing->ai);
-		}
-	}
-
-	free(outgoing);
-}
-
 void init_outgoings(meshlink_handle_t *mesh) {
-	mesh->outgoings = list_alloc((list_action_t)free_outgoing);
+	mesh->outgoing = NULL;
 }
 
 void exit_outgoings(meshlink_handle_t *mesh) {
-	if(mesh->outgoings) {
-		list_delete_list(mesh->outgoings);
-		mesh->outgoings = NULL;
+	if(mesh->outgoing) {
+		free_outgoing(mesh->outgoing);
+		mesh->outgoing = NULL;
 	}
 }

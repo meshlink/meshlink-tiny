@@ -25,24 +25,19 @@
 #include "net.h"
 #include "netutl.h"
 #include "node.h"
-#include "splay_tree.h"
 #include "utils.h"
 #include "xalloc.h"
 
-static int node_compare(const node_t *a, const node_t *b) {
-	return strcmp(a->name, b->name);
-}
-
 void init_nodes(meshlink_handle_t *mesh) {
-	mesh->nodes = splay_alloc_tree((splay_compare_t) node_compare, (splay_action_t) free_node);
+	mesh->peer = NULL;
 }
 
 void exit_nodes(meshlink_handle_t *mesh) {
-	if(mesh->nodes) {
-		splay_delete_tree(mesh->nodes);
+	if(mesh->peer) {
+		free_node(mesh->peer);
 	}
 
-	mesh->nodes = NULL;
+	mesh->peer = NULL;
 }
 
 node_t *new_node(void) {
@@ -76,22 +71,34 @@ void free_node(node_t *n) {
 }
 
 void node_add(meshlink_handle_t *mesh, node_t *n) {
+	if(n == mesh->self) {
+		return;
+	}
+
+	assert(!mesh->peer);
 	n->mesh = mesh;
-	splay_insert(mesh->nodes, n);
+	mesh->peer = n;
 }
 
 void node_del(meshlink_handle_t *mesh, node_t *n) {
+	if(n == mesh->self) {
+		return;
+	}
+
+	assert(mesh->peer && mesh->peer == n);
 	timeout_del(&mesh->loop, &n->mtutimeout);
-	splay_delete(mesh->nodes, n);
+	free_node(n);
+	mesh->peer = NULL;
 }
 
 node_t *lookup_node(meshlink_handle_t *mesh, const char *name) {
-	const node_t n = {.name = (char *)name};
-	node_t *result;
-
-	result = splay_search(mesh->nodes, &n);
-
-	return result;
+	if(mesh->peer && !strcmp(name, mesh->peer->name)) {
+		return mesh->peer;
+	} else if(!strcmp(name, mesh->self->name)) {
+		return mesh->self;
+	} else {
+		return NULL;
+	}
 }
 
 bool node_add_recent_address(meshlink_handle_t *mesh, node_t *n, const sockaddr_t *sa) {

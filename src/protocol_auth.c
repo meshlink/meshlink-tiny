@@ -173,23 +173,6 @@ bool ack_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 		n = new_node();
 		n->name = xstrdup(c->name);
 		node_add(mesh, n);
-	} else {
-		if(n->connection) {
-			/* Oh dear, we already have a connection to this node. */
-			logger(mesh, MESHLINK_INFO, "Established a second connection with %s, closing old connection", n->connection->name);
-
-			if(n->connection->outgoing) {
-				if(c->outgoing) {
-					logger(mesh, MESHLINK_WARNING, "Two outgoing connections to the same node!");
-				} else {
-					c->outgoing = n->connection->outgoing;
-				}
-
-				n->connection->outgoing = NULL;
-			}
-
-			terminate_connection(mesh, n->connection, false);
-		}
 	}
 
 	n->devclass = devclass;
@@ -211,25 +194,6 @@ bool ack_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 
 	if(mesh->meta_status_cb) {
 		mesh->meta_status_cb(mesh, (meshlink_node_t *)n, true);
-	}
-
-	/*  Terminate any connections to this node that are not activated yet */
-
-	for list_each(connection_t, other, mesh->connections) {
-		if(!other->status.active && !strcmp(other->name, c->name)) {
-			if(other->outgoing) {
-				if(c->outgoing) {
-					logger(mesh, MESHLINK_WARNING, "Two outgoing connections to the same node!");
-				} else {
-					c->outgoing = other->outgoing;
-				}
-
-				other->outgoing = NULL;
-			}
-
-			logger(mesh, MESHLINK_DEBUG, "Terminating pending second connection with %s", n->name);
-			terminate_connection(mesh, other, false);
-		}
 	}
 
 	/* TODO: Create an edge_t for this connection, send it */

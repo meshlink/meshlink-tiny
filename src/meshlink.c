@@ -488,32 +488,17 @@ static bool ecdsa_keygen(meshlink_handle_t *mesh) {
 	return true;
 }
 
-static bool timespec_lt(const struct timespec *a, const struct timespec *b) {
-	if(a->tv_sec == b->tv_sec) {
-		return a->tv_nsec < b->tv_nsec;
-	} else {
-		return a->tv_sec < b->tv_sec;
-	}
-}
-
 static struct timespec idle(event_loop_t *loop, void *data) {
 	(void)loop;
 	meshlink_handle_t *mesh = data;
-	struct timespec t, tmin = {3600, 0};
 
-	for splay_each(node_t, n, mesh->nodes) {
-		if(!n->utcp) {
-			continue;
-		}
-
-		t = utcp_timeout(n->utcp);
-
-		if(timespec_lt(&t, &tmin)) {
-			tmin = t;
-		}
+	if(mesh->peer && mesh->peer->utcp) {
+		return utcp_timeout(mesh->peer->utcp);
+	} else {
+		return (struct timespec) {
+			3600, 0
+		};
 	}
-
-	return tmin;
 }
 
 static bool meshlink_setup(meshlink_handle_t *mesh) {
@@ -1156,10 +1141,9 @@ bool meshlink_start(meshlink_handle_t *mesh) {
 	}
 
 	// Reset node connection timers
-	for splay_each(node_t, n, mesh->nodes) {
-		n->last_connect_try = 0;
+	if(mesh->peer) {
+		mesh->peer->last_connect_try = 0;
 	}
-
 
 	//Check that a valid name is set
 	if(!mesh->name) {
@@ -1229,25 +1213,17 @@ void meshlink_stop(meshlink_handle_t *mesh) {
 	}
 
 	// Close all metaconnections
-	if(mesh->connections) {
-		for(list_node_t *node = mesh->connections->head, *next; node; node = next) {
-			next = node->next;
-			connection_t *c = node->data;
-			c->outgoing = NULL;
-			terminate_connection(mesh, c, false);
-		}
+	if(mesh->connection) {
+		mesh->connection->outgoing = NULL;
+		terminate_connection(mesh, mesh->connection, false);
 	}
 
 	exit_outgoings(mesh);
 
 	// Try to write out any changed node config files, ignore errors at this point.
-	if(mesh->nodes) {
-		for splay_each(node_t, n, mesh->nodes) {
-			if(n->status.dirty) {
-				if(!node_write_config(mesh, n, false)) {
-					// ignore
-				}
-			}
+	if(mesh->peer && mesh->peer->status.dirty) {
+		if(!node_write_config(mesh, mesh->peer, false)) {
+			// ignore
 		}
 	}
 
@@ -1703,149 +1679,6 @@ meshlink_node_t *meshlink_get_node(meshlink_handle_t *mesh, const char *name) {
 	return (meshlink_node_t *)n;
 }
 
-meshlink_node_t **meshlink_get_all_nodes(meshlink_handle_t *mesh, meshlink_node_t **nodes, size_t *nmemb) {
-	if(!mesh || !nmemb || (*nmemb && !nodes)) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return NULL;
-	}
-
-	meshlink_node_t **result;
-
-	//lock mesh->nodes
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	*nmemb = mesh->nodes->count;
-	result = realloc(nodes, *nmemb * sizeof(*nodes));
-
-	if(result) {
-		meshlink_node_t **p = result;
-
-		for splay_each(node_t, n, mesh->nodes) {
-			*p++ = (meshlink_node_t *)n;
-		}
-	} else {
-		*nmemb = 0;
-		free(nodes);
-		meshlink_errno = MESHLINK_ENOMEM;
-	}
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	return result;
-}
-
-static meshlink_node_t **meshlink_get_all_nodes_by_condition(meshlink_handle_t *mesh, const void *condition, meshlink_node_t **nodes, size_t *nmemb, search_node_by_condition_t search_node) {
-	meshlink_node_t **result;
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	*nmemb = 0;
-
-	for splay_each(node_t, n, mesh->nodes) {
-		if(search_node(n, condition)) {
-			++*nmemb;
-		}
-	}
-
-	if(*nmemb == 0) {
-		free(nodes);
-		pthread_mutex_unlock(&mesh->mutex);
-		return NULL;
-	}
-
-	result = realloc(nodes, *nmemb * sizeof(*nodes));
-
-	if(result) {
-		meshlink_node_t **p = result;
-
-		for splay_each(node_t, n, mesh->nodes) {
-			if(search_node(n, condition)) {
-				*p++ = (meshlink_node_t *)n;
-			}
-		}
-	} else {
-		*nmemb = 0;
-		free(nodes);
-		meshlink_errno = MESHLINK_ENOMEM;
-	}
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	return result;
-}
-
-static bool search_node_by_dev_class(const node_t *node, const void *condition) {
-	dev_class_t *devclass = (dev_class_t *)condition;
-
-	if(*devclass == (dev_class_t)node->devclass) {
-		return true;
-	}
-
-	return false;
-}
-
-
-struct time_range {
-	time_t start;
-	time_t end;
-};
-
-meshlink_node_t **meshlink_get_all_nodes_by_dev_class(meshlink_handle_t *mesh, dev_class_t devclass, meshlink_node_t **nodes, size_t *nmemb) {
-	if(!mesh || devclass < 0 || devclass >= DEV_CLASS_COUNT || !nmemb) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return NULL;
-	}
-
-	return meshlink_get_all_nodes_by_condition(mesh, &devclass, nodes, nmemb, search_node_by_dev_class);
-}
-
-dev_class_t meshlink_get_node_dev_class(meshlink_handle_t *mesh, meshlink_node_t *node) {
-	if(!mesh || !node) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return -1;
-	}
-
-	dev_class_t devclass;
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	devclass = ((node_t *)node)->devclass;
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	return devclass;
-}
-
-bool meshlink_get_node_reachability(struct meshlink_handle *mesh, struct meshlink_node *node, time_t *last_reachable, time_t *last_unreachable) {
-	if(!mesh || !node) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return NULL;
-	}
-
-	node_t *n = (node_t *)node;
-	bool reachable;
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	reachable = n->status.reachable && !n->status.blacklisted;
-
-	// TODO: handle reachable times?
-	(void)last_reachable;
-	(void)last_unreachable;
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	return reachable;
-}
-
 bool meshlink_sign(meshlink_handle_t *mesh, const void *data, size_t len, void *signature, size_t *siglen) {
 	logger(mesh, MESHLINK_DEBUG, "meshlink_sign(%p, %zu, %p, %p)", data, len, signature, (void *)siglen);
 
@@ -2017,7 +1850,7 @@ bool meshlink_join(meshlink_handle_t *mesh, const char *invitation) {
 	}
 
 	// Refuse to join a mesh if we are already part of one. We are part of one if we know at least one other node.
-	if(mesh->nodes->count > 1) {
+	if(mesh->peer) {
 		logger(mesh, MESHLINK_ERROR, "Already part of an existing mesh\n");
 		meshlink_errno = MESHLINK_EINVAL;
 		goto exit;
@@ -2429,66 +2262,6 @@ bool meshlink_import(meshlink_handle_t *mesh, const char *data) {
 	return true;
 }
 
-bool meshlink_forget_node(meshlink_handle_t *mesh, meshlink_node_t *node) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_forget_node(%s)", node ? node->name : "(null)");
-
-	if(!mesh || !node) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return false;
-	}
-
-	node_t *n = (node_t *)node;
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	/* Check that the node is not reachable */
-	if(n->status.reachable || n->connection) {
-		pthread_mutex_unlock(&mesh->mutex);
-		logger(mesh, MESHLINK_WARNING, "Could not forget %s: still reachable", n->name);
-		return false;
-	}
-
-	/* Check that we don't have any active UTCP connections */
-	if(n->utcp && utcp_is_active(n->utcp)) {
-		pthread_mutex_unlock(&mesh->mutex);
-		logger(mesh, MESHLINK_WARNING, "Could not forget %s: active UTCP connections", n->name);
-		return false;
-	}
-
-	/* Check that we have no active connections to this node */
-	for list_each(connection_t, c, mesh->connections) {
-		if(c->node == n) {
-			pthread_mutex_unlock(&mesh->mutex);
-			logger(mesh, MESHLINK_WARNING, "Could not forget %s: active connection", n->name);
-			return false;
-		}
-	}
-
-	/* Remove any pending outgoings to this node */
-	if(mesh->outgoings) {
-		for list_each(outgoing_t, outgoing, mesh->outgoings) {
-			if(outgoing->node == n) {
-				list_delete_node(mesh->outgoings, list_node);
-			}
-		}
-	}
-
-	/* Delete the config file for this node */
-	if(!config_delete(mesh, "current", n->name)) {
-		pthread_mutex_unlock(&mesh->mutex);
-		return false;
-	}
-
-	/* Delete the node struct and any remaining edges referencing this node */
-	node_del(mesh, n);
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	return config_sync(mesh, "current");
-}
-
 /* Hint that a hostname may be found at an address
  * See header file for detailed comment.
  */
@@ -2863,12 +2636,10 @@ void meshlink_set_channel_accept_cb(meshlink_handle_t *mesh, meshlink_channel_ac
 	mesh->channel_accept_cb = cb;
 	mesh->receive_cb = channel_receive;
 
-	for splay_each(node_t, n, mesh->nodes) {
-		if(!n->utcp && n != mesh->self) {
-			n->utcp = utcp_init(channel_accept, channel_pre_accept, channel_send, n);
-			utcp_set_mtu(n->utcp, n->mtu - sizeof(meshlink_packethdr_t));
-			utcp_set_retransmit_cb(n->utcp, channel_retransmit);
-		}
+	if(mesh->peer) {
+		mesh->peer->utcp = utcp_init(channel_accept, channel_pre_accept, channel_send, mesh->peer);
+		utcp_set_mtu(mesh->peer->utcp, mesh->peer->mtu - sizeof(meshlink_packethdr_t));
+		utcp_set_retransmit_cb(mesh->peer->utcp, channel_retransmit);
 	}
 
 	pthread_mutex_unlock(&mesh->mutex);
@@ -3514,7 +3285,7 @@ void meshlink_set_storage_policy(struct meshlink_handle *mesh, meshlink_storage_
 void handle_network_change(meshlink_handle_t *mesh, bool online) {
 	(void)online;
 
-	if(!mesh->connections || !mesh->loop.running) {
+	if(!mesh->loop.running) {
 		return;
 	}
 

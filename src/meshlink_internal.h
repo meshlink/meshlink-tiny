@@ -93,10 +93,9 @@ struct meshlink_handle {
 	meshlink_queue_t outpacketqueue;
 	signal_t datafromapp;
 
-	struct splay_tree_t *nodes;
-
-	struct list_t *connections;
-	struct list_t *outgoings;
+	struct node_t *peer;
+	struct connection_t *connection;
+	struct outgoing_t *outgoing;
 
 	// Meta-connection-related members
 	struct splay_tree_t *past_request_tree;

@@ -41,9 +41,6 @@ static void node_status(meshlink_handle_t *mesh, meshlink_node_t *node, bool rea
 	}
 }
 
-static meshlink_node_t **nodes;
-static size_t nnodes;
-
 static void parse_command(meshlink_handle_t *mesh, char *buf) {
 	char *arg = strchr(buf, ' ');
 
@@ -68,30 +65,6 @@ static void parse_command(meshlink_handle_t *mesh, char *buf) {
 		if(!meshlink_start(mesh)) {
 			fprintf(stderr, "Could not restart MeshLink: %s\n", meshlink_strerror(meshlink_errno));
 			exit(1);
-		}
-	} else if(!strcasecmp(buf, "who")) {
-		if(!arg) {
-			nodes = meshlink_get_all_nodes(mesh, nodes, &nnodes);
-
-			if(!nnodes) {
-				fprintf(stderr, "Could not get list of nodes: %s\n", meshlink_strerror(meshlink_errno));
-			} else {
-				printf("%zu known nodes:", nnodes);
-
-				for(size_t i = 0; i < nnodes; i++) {
-					printf(" %s", nodes[i]->name);
-				}
-
-				printf("\n");
-			}
-		} else {
-			meshlink_node_t *node = meshlink_get_node(mesh, arg);
-
-			if(!node) {
-				fprintf(stderr, "Error looking up '%s': %s\n", arg, meshlink_strerror(meshlink_errno));
-			} else {
-				printf("Node %s found\n", arg);
-			}
 		}
 	} else if(!strcasecmp(buf, "quit")) {
 		printf("Bye!\n");

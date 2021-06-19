@@ -182,10 +182,10 @@ static bool req_key_ext_h(meshlink_handle_t *mesh, connection_t *c, const char *
 		}
 
 		/* If we are trying to form an outgoing connection to this node, retry immediately */
-		for list_each(outgoing_t, outgoing, mesh->outgoings) {
-			if(outgoing->node == from && outgoing->ev.cb) {
-				outgoing->timeout = 0;
-				timeout_set(&mesh->loop, &outgoing->ev, &(struct timespec) {
+		if(mesh->outgoing) {
+			if(mesh->outgoing->node == from && mesh->outgoing->ev.cb) {
+				mesh->outgoing->timeout = 0;
+				timeout_set(&mesh->loop, &mesh->outgoing->ev, &(struct timespec) {
 					0, 0
 				});
 			}
