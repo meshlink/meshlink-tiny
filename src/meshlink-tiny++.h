@@ -598,35 +598,6 @@ public:
 		return meshlink_add_external_address(handle);
 	}
 
-	/// Get the network port used by the local node.
-	/** This function returns the network port that the local node is listening on.
-	 *
-	 *  @return              This function returns the port number, or -1 in case of an error.
-	 */
-	int get_port() {
-		return meshlink_get_port(handle);
-	}
-
-	/// Set the network port used by the local node.
-	/** This function sets the network port that the local node is listening on.
-	 *  It may only be called when the mesh is not running.
-	 *  If unsure, call stop() before calling this function.
-	 *  Also note that if your node is already part of a mesh with other nodes,
-	 *  that the other nodes may no longer be able to initiate connections to the local node,
-	 *  since they will try to connect to the previously configured port.
-	 *
-	 *  @param port          The port number to listen on. This must be between 0 and 65535.
-	 *                       If the port is set to 0, then MeshLink will listen on a port
-	 *                       that is randomly assigned by the operating system every time open() is called.
-	 *
-	 *  @return              This function returns true if the port was successfully changed
-	 *                       to the desired port, false otherwise. If it returns false, there
-	 *                       is no guarantee that MeshLink is listening on the old port.
-	 */
-	bool set_port(int port) {
-		return meshlink_set_port(handle, port);
-	}
-
 	/// Set the scheduling granularity of the application
 	/** This should be set to the effective scheduling granularity for the application.
 	 *  This depends on the scheduling granularity of the operating system, the application's

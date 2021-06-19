@@ -428,63 +428,6 @@ char *meshlink_get_local_address_for_family(meshlink_handle_t *mesh, int family)
 	return xstrdup(localaddr);
 }
 
-static bool try_bind(meshlink_handle_t *mesh, int port) {
-	struct addrinfo *ai = NULL;
-	struct addrinfo hint = {
-		.ai_flags = AI_PASSIVE,
-		.ai_family = AF_UNSPEC,
-		.ai_socktype = SOCK_STREAM,
-		.ai_protocol = IPPROTO_TCP,
-	};
-
-	char portstr[16];
-	snprintf(portstr, sizeof(portstr), "%d", port);
-
-	if(getaddrinfo(NULL, portstr, &hint, &ai) || !ai) {
-		return false;
-	}
-
-	bool success = false;
-
-	for(struct addrinfo *aip = ai; aip; aip = aip->ai_next) {
-		/* Try to bind to TCP. */
-
-		int tcp_fd = setup_tcp_listen_socket(mesh, aip);
-
-		if(tcp_fd == -1) {
-			if(errno == EADDRINUSE) {
-				/* If this port is in use for any address family, avoid it. */
-				success = false;
-				break;
-			} else {
-				continue;
-			}
-		}
-
-		closesocket(tcp_fd);
-		success = true;
-	}
-
-	freeaddrinfo(ai);
-	return success;
-}
-
-int check_port(meshlink_handle_t *mesh) {
-	for(int i = 0; i < 1000; i++) {
-		int port = 0x1000 + prng(mesh, 0x8000);
-
-		if(try_bind(mesh, port)) {
-			free(mesh->myport);
-			xasprintf(&mesh->myport, "%d", port);
-			return port;
-		}
-	}
-
-	meshlink_errno = MESHLINK_ENETWORK;
-	logger(mesh, MESHLINK_DEBUG, "Could not find any available network port.\n");
-	return 0;
-}
-
 static bool write_main_config_files(meshlink_handle_t *mesh) {
 	if(!mesh->confbase) {
 		return true;
@@ -911,10 +854,7 @@ static bool meshlink_setup(meshlink_handle_t *mesh) {
 		return false;
 	}
 
-	if(check_port(mesh) == 0) {
-		meshlink_errno = MESHLINK_ENETWORK;
-		return false;
-	}
+	mesh->myport = xstrdup("0");
 
 	/* Create a node for ourself */
 
@@ -1561,18 +1501,11 @@ bool meshlink_start(meshlink_handle_t *mesh) {
 		return true;
 	}
 
-	if(mesh->listen_socket[0].tcp.fd < 0) {
-		logger(mesh, MESHLINK_ERROR, "Listening socket not open\n");
-		meshlink_errno = MESHLINK_ENETWORK;
-		return false;
-	}
-
 	// Reset node connection timers
 	for splay_each(node_t, n, mesh->nodes) {
 		n->last_connect_try = 0;
 	}
 
-	// TODO: open listening sockets first
 
 	//Check that a valid name is set
 	if(!mesh->name) {
@@ -2471,98 +2404,6 @@ bool meshlink_add_external_address(meshlink_handle_t *mesh) {
 	free(address);
 
 	return rval;
-}
-
-int meshlink_get_port(meshlink_handle_t *mesh) {
-	if(!mesh) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return -1;
-	}
-
-	if(!mesh->myport) {
-		meshlink_errno = MESHLINK_EINTERNAL;
-		return -1;
-	}
-
-	int port;
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	port = atoi(mesh->myport);
-	pthread_mutex_unlock(&mesh->mutex);
-
-	return port;
-}
-
-bool meshlink_set_port(meshlink_handle_t *mesh, int port) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_set_port(%d)", port);
-
-	if(!mesh || port < 0 || port >= 65536 || mesh->threadstarted) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return false;
-	}
-
-	if(mesh->myport && port == atoi(mesh->myport)) {
-		return true;
-	}
-
-	if(!try_bind(mesh, port)) {
-		meshlink_errno = MESHLINK_ENETWORK;
-		return false;
-	}
-
-	devtool_trybind_probe();
-
-	bool rval = false;
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	if(mesh->threadstarted) {
-		meshlink_errno = MESHLINK_EINVAL;
-		goto done;
-	}
-
-	free(mesh->myport);
-	xasprintf(&mesh->myport, "%d", port);
-
-	/* Close down the network. This also deletes mesh->self. */
-	close_network_connections(mesh);
-
-	/* Recreate mesh->self. */
-	mesh->self = new_node();
-	mesh->self->name = xstrdup(mesh->name);
-	mesh->self->devclass = mesh->devclass;
-	mesh->self->session_id = mesh->session_id;
-	xasprintf(&mesh->myport, "%d", port);
-
-	if(!node_read_public_key(mesh, mesh->self)) {
-		logger(NULL, MESHLINK_ERROR, "Could not read our host configuration file!");
-		meshlink_errno = MESHLINK_ESTORAGE;
-		free_node(mesh->self);
-		mesh->self = NULL;
-		goto done;
-	} else if(!setup_network(mesh)) {
-		meshlink_errno = MESHLINK_ENETWORK;
-		goto done;
-	}
-
-	/* Rebuild our own list of recent addresses */
-	memset(mesh->self->recent, 0, sizeof(mesh->self->recent));
-	add_local_addresses(mesh);
-
-	/* Write meshlink.conf with the updated port number */
-	write_main_config_files(mesh);
-
-	rval = config_sync(mesh, "current");
-
-done:
-	pthread_mutex_unlock(&mesh->mutex);
-
-	return rval && meshlink_get_port(mesh) == port;
 }
 
 bool meshlink_join(meshlink_handle_t *mesh, const char *invitation) {

@@ -328,156 +328,6 @@ static bool load_node(meshlink_handle_t *mesh, const char *name, void *priv) {
 	return true;
 }
 
-int setup_tcp_listen_socket(meshlink_handle_t *mesh, const struct addrinfo *aip) {
-	int nfd = socket(aip->ai_family, SOCK_STREAM, IPPROTO_TCP);
-
-	if(nfd == -1) {
-		return -1;
-	}
-
-#ifdef FD_CLOEXEC
-	fcntl(nfd, F_SETFD, FD_CLOEXEC);
-#endif
-
-#ifdef O_NONBLOCK
-	int flags = fcntl(nfd, F_GETFL);
-
-	if(fcntl(nfd, F_SETFL, flags | O_NONBLOCK) < 0) {
-		closesocket(nfd);
-		logger(mesh, MESHLINK_ERROR, "System call `%s' failed: %s", "fcntl", strerror(errno));
-		return -1;
-	}
-
-#elif defined(WIN32)
-	unsigned long arg = 1;
-
-	if(ioctlsocket(nfd, FIONBIO, &arg) != 0) {
-		closesocket(nfd);
-		logger(mesh, MESHLINK_ERROR, "Call to `%s' failed: %s", "ioctlsocket", sockstrerror(sockerrno));
-		return -1;
-	}
-
-#endif
-	int option = 1;
-	setsockopt(nfd, SOL_SOCKET, SO_REUSEADDR, (void *)&option, sizeof(option));
-
-#if defined(IPV6_V6ONLY)
-
-	if(aip->ai_family == AF_INET6) {
-		setsockopt(nfd, IPPROTO_IPV6, IPV6_V6ONLY, (void *)&option, sizeof(option));
-	}
-
-#else
-#warning IPV6_V6ONLY not defined
-#endif
-
-	if(bind(nfd, aip->ai_addr, aip->ai_addrlen)) {
-		closesocket(nfd);
-		return -1;
-	}
-
-	if(listen(nfd, 3)) {
-		logger(mesh, MESHLINK_ERROR, "System call `%s' failed: %s", "listen", sockstrerror(sockerrno));
-		closesocket(nfd);
-		return -1;
-	}
-
-	return nfd;
-}
-
-/*
-  Add listening sockets.
-*/
-static bool add_listen_sockets(meshlink_handle_t *mesh) {
-	struct addrinfo *ai;
-
-	struct addrinfo hint = {
-		.ai_family = AF_UNSPEC,
-		.ai_socktype = SOCK_STREAM,
-		.ai_protocol = IPPROTO_TCP,
-		.ai_flags = AI_PASSIVE | AI_NUMERICSERV,
-	};
-
-	int err = getaddrinfo(NULL, mesh->myport, &hint, &ai);
-
-	if(err || !ai) {
-		logger(mesh, MESHLINK_ERROR, "System call `%s' failed: %s", "getaddrinfo", err == EAI_SYSTEM ? strerror(err) : gai_strerror(err));
-		return false;
-	}
-
-	bool success = false;
-
-	for(struct addrinfo *aip = ai; aip; aip = aip->ai_next) {
-		// Ignore duplicate addresses
-		bool found = false;
-
-		for(int i = 0; i < mesh->listen_sockets; i++) {
-			if(!memcmp(&mesh->listen_socket[i].sa, aip->ai_addr, aip->ai_addrlen)) {
-				found = true;
-				break;
-			}
-		}
-
-		if(found) {
-			continue;
-		}
-
-		if(mesh->listen_sockets >= MAXSOCKETS) {
-			logger(mesh, MESHLINK_ERROR, "Too many listening sockets");
-			return false;
-		}
-
-		/* Try to bind to TCP */
-
-		int tcp_fd = setup_tcp_listen_socket(mesh, aip);
-
-		if(tcp_fd == -1) {
-			if(errno == EADDRINUSE) {
-				/* If this port is in use for any address family, avoid it. */
-				success = false;
-				break;
-			} else {
-				continue;
-			}
-		}
-
-		io_add(&mesh->loop, &mesh->listen_socket[mesh->listen_sockets].tcp, handle_new_meta_connection, &mesh->listen_socket[mesh->listen_sockets], tcp_fd, IO_READ);
-
-		if(mesh->log_level <= MESHLINK_INFO) {
-			char *hostname = sockaddr2hostname((sockaddr_t *) aip->ai_addr);
-			logger(mesh, MESHLINK_INFO, "Listening on %s", hostname);
-			free(hostname);
-		}
-
-		memcpy(&mesh->listen_socket[mesh->listen_sockets].sa, aip->ai_addr, aip->ai_addrlen);
-		memcpy(&mesh->listen_socket[mesh->listen_sockets].broadcast_sa, aip->ai_addr, aip->ai_addrlen);
-
-		if(aip->ai_family == AF_INET6) {
-			mesh->listen_socket[mesh->listen_sockets].broadcast_sa.in6.sin6_addr.s6_addr[0x0] = 0xff;
-			mesh->listen_socket[mesh->listen_sockets].broadcast_sa.in6.sin6_addr.s6_addr[0x1] = 0x02;
-			mesh->listen_socket[mesh->listen_sockets].broadcast_sa.in6.sin6_addr.s6_addr[0xf] = 0x01;
-		} else {
-			mesh->listen_socket[mesh->listen_sockets].broadcast_sa.in.sin_addr.s_addr = 0xffffffff;
-		}
-
-		mesh->listen_sockets++;
-		success = true;
-	}
-
-	freeaddrinfo(ai);
-
-	if(!success) {
-		for(int i = 0; i < mesh->listen_sockets; i++) {
-			io_del(&mesh->loop, &mesh->listen_socket[i].tcp);
-			closesocket(mesh->listen_socket[i].tcp.fd);
-		}
-
-		mesh->listen_sockets = 0;
-	}
-
-	return success;
-}
-
 /*
   Configure node_t mesh->self and set up the local sockets (listen only)
 */
@@ -488,33 +338,6 @@ static bool setup_myself(meshlink_handle_t *mesh) {
 
 	if(!config_scan_all(mesh, "current", "hosts", load_node, NULL)) {
 		logger(mesh, MESHLINK_WARNING, "Could not scan all host config files");
-	}
-
-	/* Open sockets */
-
-	mesh->listen_sockets = 0;
-
-	if(!add_listen_sockets(mesh)) {
-		if(strcmp(mesh->myport, "0")) {
-			logger(mesh, MESHLINK_WARNING, "Could not bind to port %s, trying to find an alternative port", mesh->myport);
-
-			if(!check_port(mesh)) {
-				logger(mesh, MESHLINK_WARNING, "Could not bind to any port, trying to bind to port 0");
-				free(mesh->myport);
-				mesh->myport = xstrdup("0");
-			}
-
-			if(!add_listen_sockets(mesh)) {
-				return false;
-			}
-		} else {
-			return false;
-		}
-	}
-
-	if(!mesh->listen_sockets) {
-		logger(mesh, MESHLINK_ERROR, "Unable to create any listening socket!");
-		return false;
 	}
 
 	/* Done. */
@@ -551,11 +374,6 @@ void close_network_connections(meshlink_handle_t *mesh) {
 			c->outgoing = NULL;
 			terminate_connection(mesh, c, false);
 		}
-	}
-
-	for(int i = 0; i < mesh->listen_sockets; i++) {
-		io_del(&mesh->loop, &mesh->listen_socket[i].tcp);
-		closesocket(mesh->listen_socket[i].tcp.fd);
 	}
 
 	exit_requests(mesh);

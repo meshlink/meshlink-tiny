@@ -88,7 +88,6 @@ void handle_incoming_vpn_data(struct event_loop_t *loop, void *, int);
 void finish_connecting(struct meshlink_handle *mesh, struct connection_t *);
 void do_outgoing_connection(struct meshlink_handle *mesh, struct outgoing_t *);
 void handle_new_meta_connection(struct event_loop_t *loop, void *, int);
-int setup_tcp_listen_socket(struct meshlink_handle *mesh, const struct addrinfo *aip) __attribute__((__warn_unused_result__));
 bool send_sptps_data(void *handle, uint8_t type, const void *data, size_t len);
 bool receive_sptps_record(void *handle, uint8_t type, const void *data, uint16_t len) __attribute__((__warn_unused_result__));
 void send_packet(struct meshlink_handle *mesh, struct node_t *, struct vpn_packet_t *);
@@ -109,7 +108,6 @@ bool node_write_config(struct meshlink_handle *mesh, struct node_t *, bool new_k
 void send_mtu_probe(struct meshlink_handle *mesh, struct node_t *);
 void handle_meta_connection_data(struct meshlink_handle *mesh, struct connection_t *);
 void retry(struct meshlink_handle *mesh);
-int check_port(struct meshlink_handle *mesh);
 void flush_meta(struct meshlink_handle *mesh, struct connection_t *);
 
 #ifndef HAVE_MINGW

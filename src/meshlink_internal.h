@@ -45,12 +45,6 @@ static const char meshlink_udp_label[] = "MeshLink UDP";
 #define MESHLINK_CONFIG_VERSION 2
 #define MESHLINK_INVITATION_VERSION 2
 
-typedef struct listen_socket_t {
-	struct io_t tcp;
-	sockaddr_t sa;
-	sockaddr_t broadcast_sa;
-} listen_socket_t;
-
 struct meshlink_open_params {
 	char *confbase;
 	char *lock_filename;
@@ -92,8 +86,6 @@ struct meshlink_handle {
 
 	// The most important network-related members come first
 	int reachable;
-	int listen_sockets;
-	listen_socket_t listen_socket[MAXSOCKETS];
 
 	meshlink_receive_cb_t receive_cb;
 	meshlink_queue_t outpacketqueue;

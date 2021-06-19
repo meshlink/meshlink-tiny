@@ -40,8 +40,6 @@
 #define MSG_NOSIGNAL 0
 #endif
 
-static const int max_connection_burst = 100;
-
 /* Setup sockets */
 
 static void configure_tcp(connection_t *c) {
@@ -409,93 +407,6 @@ void setup_outgoing_connection(meshlink_handle_t *mesh, outgoing_t *outgoing) {
 	}
 
 	do_outgoing_connection(mesh, outgoing);
-}
-
-/// Delayed close of a filedescriptor.
-static void tarpit(meshlink_handle_t *mesh, int fd) {
-	if(!fd) {
-		return;
-	}
-
-	if(mesh->pits[mesh->next_pit]) {
-		closesocket(mesh->pits[mesh->next_pit]);
-	}
-
-	mesh->pits[mesh->next_pit++] = fd;
-
-	if(mesh->next_pit >= (int)(sizeof mesh->pits / sizeof mesh->pits[0])) {
-		mesh->next_pit = 0;
-	}
-}
-
-/*
-  accept a new tcp connect and create a
-  new connection
-*/
-void handle_new_meta_connection(event_loop_t *loop, void *data, int flags) {
-	(void)flags;
-	meshlink_handle_t *mesh = loop->data;
-	listen_socket_t *l = data;
-	connection_t *c;
-	sockaddr_t sa;
-	int fd;
-	socklen_t len = sizeof(sa);
-
-	memset(&sa, 0, sizeof(sa));
-
-	fd = accept(l->tcp.fd, &sa.sa, &len);
-
-	if(fd < 0) {
-		if(sockwouldblock(errno)) {
-			return;
-		}
-
-		if(errno == EINVAL) { // TODO: check if Windows agrees
-			event_loop_stop(loop);
-			return;
-		}
-
-		logger(mesh, MESHLINK_ERROR, "Accepting a new connection failed: %s", sockstrerror(sockerrno));
-		return;
-	}
-
-	sockaddrunmap(&sa);
-
-	/* Rate limit incoming connections to max_connection_burst/second. */
-
-	if(mesh->loop.now.tv_sec != mesh->connection_burst_time) {
-		mesh->connection_burst_time = mesh->loop.now.tv_sec;
-		mesh->connection_burst = 0;
-	}
-
-	if(mesh->connection_burst >= max_connection_burst) {
-		tarpit(mesh, fd);
-		return;
-	}
-
-	mesh->connection_burst++;
-
-	// Accept the new connection
-
-	c = new_connection();
-	c->name = xstrdup("<unknown>");
-
-	c->address = sa;
-	c->socket = fd;
-	c->last_ping_time = mesh->loop.now.tv_sec;
-
-	char *hostname = sockaddr2hostname(&sa);
-	logger(mesh, MESHLINK_INFO, "Connection from %s", hostname);
-	free(hostname);
-
-	io_add(&mesh->loop, &c->io, handle_meta_io, c, c->socket, IO_READ);
-
-	configure_tcp(c);
-
-	connection_add(mesh, c);
-
-	c->allow_request = ID;
-	send_id(mesh, c);
 }
 
 static void free_outgoing(outgoing_t *outgoing) {

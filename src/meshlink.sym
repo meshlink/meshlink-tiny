@@ -43,7 +43,6 @@ meshlink_get_node_dev_class
 meshlink_get_node_reachability
 meshlink_get_node_submesh
 meshlink_get_pmtu
-meshlink_get_port
 meshlink_get_self
 meshlink_get_submesh
 meshlink_hint_address
@@ -84,7 +83,6 @@ meshlink_set_node_channel_timeout
 meshlink_set_node_duplicate_cb
 meshlink_set_node_pmtu_cb
 meshlink_set_node_status_cb
-meshlink_set_port
 meshlink_set_receive_cb
 meshlink_set_scheduling_granularity
 meshlink_sign
