@@ -95,12 +95,6 @@ bool receive_meta_sptps(void *handle, uint8_t type, const void *data, uint16_t l
 		return true;
 	}
 
-	/* Are we receiving a TCPpacket? */
-
-	if(c->tcplen) {
-		abort(); // TODO: get rid of tcplen altogether
-	}
-
 	/* Change newline to null byte, just like non-SPTPS requests */
 
 	if(request[length - 1] == '\n') {

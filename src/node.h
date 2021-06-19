@@ -53,10 +53,8 @@ typedef struct node_t {
 	dev_class_t devclass;
 
 	// Used for packet I/O
-	int sock;                               /* Socket to use for outgoing UDP packets */
 	uint32_t session_id;                    /* Unique ID for this node's currently running process */
 	sptps_t sptps;
-	sockaddr_t address;                     /* his real (internet) ip to send UDP packets to */
 
 	struct utcp *utcp;
 
@@ -85,7 +83,6 @@ typedef struct node_t {
 
 	char *canonical_address;                /* The canonical address of this node, if known */
 	sockaddr_t recent[MAX_RECENT];          /* Recently seen addresses */
-	sockaddr_t catta_address;               /* Latest address seen by Catta */
 
 	struct node_t *nexthop;                 /* nearest node from us to him */
 } node_t;

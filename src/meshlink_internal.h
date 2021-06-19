@@ -97,12 +97,9 @@ struct meshlink_handle {
 	struct connection_t *connection;
 	struct outgoing_t *outgoing;
 
-	int connection_burst;
 	int contradicting_add_edge;
 	int contradicting_del_edge;
 	int sleeptime;
-	time_t connection_burst_time;
-	time_t last_hard_try;
 	time_t last_unreachable;
 	timeout_t pingtimer;
 	timeout_t periodictimer;
@@ -110,9 +107,6 @@ struct meshlink_handle {
 	struct connection_t *everyone;
 	uint64_t prng_state[4];
 	uint32_t session_id;
-
-	int next_pit;
-	int pits[10];
 
 	// Infrequently used callbacks
 	meshlink_node_status_cb_t node_status_cb;

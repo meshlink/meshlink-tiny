@@ -55,8 +55,6 @@ void free_node(node_t *n) {
 
 	utcp_exit(n->utcp);
 
-	sockaddrfree(&n->address);
-
 	ecdsa_free(n->ecdsa);
 	sptps_stop(&n->sptps);
 

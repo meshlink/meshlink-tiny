@@ -66,7 +66,6 @@ void devtool_get_node_status(meshlink_handle_t *mesh, meshlink_node_t *node, dev
 	}
 
 	memcpy(&status->status, &internal->status, sizeof status->status);
-	memcpy(&status->address, &internal->address, sizeof status->address);
 	status->mtu = internal->mtu;
 	status->minmtu = internal->minmtu;
 	status->maxmtu = internal->maxmtu;

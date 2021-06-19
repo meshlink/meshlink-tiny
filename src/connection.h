@@ -62,7 +62,6 @@ typedef struct connection_t {
 	struct buffer_t inbuf;
 	struct buffer_t outbuf;
 	io_t io;                        /* input/output event on this metadata connection */
-	int tcplen;                     /* length of incoming TCPpacket */
 	int allow_request;              /* defined if there's only one request possible */
 	time_t last_ping_time;          /* last time we saw some activity from the other end or pinged them */
 	time_t last_key_renewal;        /* last time we renewed the SPTPS key */

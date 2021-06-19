@@ -32,7 +32,6 @@ typedef struct devtool_node_status devtool_node_status_t;
 /// The status of a node.
 struct devtool_node_status {
 	uint32_t status;
-	struct sockaddr_storage address;
 	uint16_t mtu;
 	uint16_t minmtu;
 	uint16_t maxmtu;
