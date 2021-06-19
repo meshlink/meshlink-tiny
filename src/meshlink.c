@@ -1419,22 +1419,6 @@ void meshlink_set_node_status_cb(meshlink_handle_t *mesh, meshlink_node_status_c
 	pthread_mutex_unlock(&mesh->mutex);
 }
 
-void meshlink_set_node_pmtu_cb(meshlink_handle_t *mesh, meshlink_node_pmtu_cb_t cb) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_set_node_pmtu_cb(%p)", (void *)(intptr_t)cb);
-
-	if(!mesh) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	mesh->node_pmtu_cb = cb;
-	pthread_mutex_unlock(&mesh->mutex);
-}
-
 void meshlink_set_node_duplicate_cb(meshlink_handle_t *mesh, meshlink_node_duplicate_cb_t cb) {
 	logger(mesh, MESHLINK_DEBUG, "meshlink_set_node_duplicate_cb(%p)", (void *)(intptr_t)cb);
 
@@ -1588,35 +1572,8 @@ void meshlink_send_from_queue(event_loop_t *loop, void *data) {
 
 	for(vpn_packet_t *packet; (packet = meshlink_queue_pop(&mesh->outpacketqueue));) {
 		logger(mesh, MESHLINK_DEBUG, "Removing packet of %d bytes from packet queue", packet->len);
-		mesh->self->in_packets++;
-		mesh->self->in_bytes += packet->len;
 		route(mesh, mesh->self, packet);
 		free(packet);
-	}
-}
-
-ssize_t meshlink_get_pmtu(meshlink_handle_t *mesh, meshlink_node_t *destination) {
-	if(!mesh || !destination) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return -1;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	node_t *n = (node_t *)destination;
-
-	if(!n->status.reachable) {
-		pthread_mutex_unlock(&mesh->mutex);
-		return 0;
-
-	} else if(n->mtuprobes > 30 && n->minmtu) {
-		pthread_mutex_unlock(&mesh->mutex);
-		return n->minmtu;
-	} else {
-		pthread_mutex_unlock(&mesh->mutex);
-		return MTU;
 	}
 }
 
@@ -2447,17 +2404,6 @@ static void channel_accept(struct utcp_connection *utcp_connection, uint16_t por
 	}
 }
 
-static void channel_retransmit(struct utcp_connection *utcp_connection) {
-	node_t *n = utcp_connection->utcp->priv;
-	meshlink_handle_t *mesh = n->mesh;
-
-	if(n->mtuprobes == 31 && n->mtutimeout.cb) {
-		timeout_set(&mesh->loop, &n->mtutimeout, &(struct timespec) {
-			0, 0
-		});
-	}
-}
-
 static ssize_t channel_send(struct utcp *utcp, const void *data, size_t len) {
 	node_t *n = utcp->priv;
 
@@ -2638,8 +2584,6 @@ void meshlink_set_channel_accept_cb(meshlink_handle_t *mesh, meshlink_channel_ac
 
 	if(mesh->peer) {
 		mesh->peer->utcp = utcp_init(channel_accept, channel_pre_accept, channel_send, mesh->peer);
-		utcp_set_mtu(mesh->peer->utcp, mesh->peer->mtu - sizeof(meshlink_packethdr_t));
-		utcp_set_retransmit_cb(mesh->peer->utcp, channel_retransmit);
 	}
 
 	pthread_mutex_unlock(&mesh->mutex);
@@ -2725,8 +2669,6 @@ meshlink_channel_t *meshlink_channel_open_ex(meshlink_handle_t *mesh, meshlink_n
 
 	if(!n->utcp) {
 		n->utcp = utcp_init(channel_accept, channel_pre_accept, channel_send, n);
-		utcp_set_mtu(n->utcp, n->mtu - sizeof(meshlink_packethdr_t));
-		utcp_set_retransmit_cb(n->utcp, channel_retransmit);
 		mesh->receive_cb = channel_receive;
 
 		if(!n->utcp) {
@@ -3102,8 +3044,6 @@ void meshlink_set_node_channel_timeout(meshlink_handle_t *mesh, meshlink_node_t 
 
 	if(!n->utcp) {
 		n->utcp = utcp_init(channel_accept, channel_pre_accept, channel_send, n);
-		utcp_set_mtu(n->utcp, n->mtu - sizeof(meshlink_packethdr_t));
-		utcp_set_retransmit_cb(n->utcp, channel_retransmit);
 	}
 
 	utcp_set_user_timeout(n->utcp, timeout);
@@ -3114,24 +3054,10 @@ void meshlink_set_node_channel_timeout(meshlink_handle_t *mesh, meshlink_node_t 
 void update_node_status(meshlink_handle_t *mesh, node_t *n) {
 	if(n->status.reachable && mesh->channel_accept_cb && !n->utcp) {
 		n->utcp = utcp_init(channel_accept, channel_pre_accept, channel_send, n);
-		utcp_set_mtu(n->utcp, n->mtu - sizeof(meshlink_packethdr_t));
-		utcp_set_retransmit_cb(n->utcp, channel_retransmit);
 	}
 
 	if(mesh->node_status_cb) {
 		mesh->node_status_cb(mesh, (meshlink_node_t *)n, n->status.reachable && !n->status.blacklisted);
-	}
-
-	if(mesh->node_pmtu_cb) {
-		mesh->node_pmtu_cb(mesh, (meshlink_node_t *)n, n->minmtu);
-	}
-}
-
-void update_node_pmtu(meshlink_handle_t *mesh, node_t *n) {
-	utcp_set_mtu(n->utcp, (n->minmtu > MINMTU ? n->minmtu : MINMTU) - sizeof(meshlink_packethdr_t));
-
-	if(mesh->node_pmtu_cb && !n->status.blacklisted) {
-		mesh->node_pmtu_cb(mesh, (meshlink_node_t *)n, n->minmtu);
 	}
 }
 

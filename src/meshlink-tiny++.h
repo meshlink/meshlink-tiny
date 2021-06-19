@@ -56,14 +56,6 @@ typedef void (*connection_try_cb_t)(mesh *mesh, node *node);
  */
 typedef void (*node_status_cb_t)(mesh *mesh, node *node, bool reachable);
 
-/// A callback reporting node path MTU changes.
-/** @param mesh       A handle which represents an instance of MeshLink.
- *  @param node       A pointer to a meshlink_node_t describing the node whose status changed.
- *                    This pointer is valid until meshlink_close() is called.
- *  @param pmtu       The current path MTU to the node, or 0 if UDP communication is not (yet) possible.
- */
-typedef void (*node_pmtu_cb_t)(mesh *mesh, node *node, uint16_t pmtu);
-
 /// A callback reporting duplicate node detection.
 /** @param mesh       A handle which represents an instance of MeshLink.
  *  @param node       A pointer to a meshlink_node_t describing the node which is duplicate.
@@ -243,13 +235,6 @@ public:
 		(void)reachable;
 	}
 
-	/// This functions is called whenever another node's path MTU changes.
-	virtual void node_pmtu(node *peer, uint16_t pmtu) {
-		/* do nothing */
-		(void)peer;
-		(void)pmtu;
-	}
-
 	/// This functions is called whenever a duplicate node is detected.
 	virtual void node_duplicate(node *peer) {
 		/* do nothing */
@@ -365,7 +350,6 @@ public:
 	bool start() {
 		meshlink_set_receive_cb(handle, &receive_trampoline);
 		meshlink_set_node_status_cb(handle, &node_status_trampoline);
-		meshlink_set_node_pmtu_cb(handle, &node_pmtu_trampoline);
 		meshlink_set_node_duplicate_cb(handle, &node_duplicate_trampoline);
 		meshlink_set_log_cb(handle, MESHLINK_DEBUG, &log_trampoline);
 		meshlink_set_error_cb(handle, &error_trampoline);
@@ -974,15 +958,6 @@ private:
 
 		meshlink::mesh *that = static_cast<mesh *>(handle->priv);
 		that->node_status(static_cast<node *>(peer), reachable);
-	}
-
-	static void node_pmtu_trampoline(meshlink_handle_t *handle, meshlink_node_t *peer, uint16_t pmtu) {
-		if(!(handle->priv)) {
-			return;
-		}
-
-		meshlink::mesh *that = static_cast<mesh *>(handle->priv);
-		that->node_pmtu(static_cast<node *>(peer), pmtu);
 	}
 
 	static void node_duplicate_trampoline(meshlink_handle_t *handle, meshlink_node_t *peer) {

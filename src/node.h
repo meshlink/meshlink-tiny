@@ -49,7 +49,6 @@ typedef struct node_t {
 
 	// Private member variables
 	node_status_t status;
-	uint16_t minmtu;                        /* Probed minimum MTU */
 	dev_class_t devclass;
 
 	// Used for packet I/O
@@ -57,18 +56,6 @@ typedef struct node_t {
 	sptps_t sptps;
 
 	struct utcp *utcp;
-
-	// Traffic counters
-	uint64_t in_packets;
-	uint64_t in_bytes;
-	uint64_t out_packets;
-	uint64_t out_bytes;
-
-	// MTU probes
-	timeout_t mtutimeout;                   /* Probe event */
-	int mtuprobes;                          /* Number of probes */
-	uint16_t mtu;                           /* Maximum size of packets to send to this node */
-	uint16_t maxmtu;                        /* Probed maximum MTU */
 
 	// Used for meta-connection I/O, timeouts
 	struct meshlink_handle *mesh;           /* The mesh this node belongs to */

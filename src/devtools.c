@@ -53,48 +53,6 @@ void (*devtool_keyrotate_probe)(int stage) = keyrotate_nop_probe;
 void (*devtool_set_inviter_commits_first)(bool inviter_commited_first) = inviter_commits_first_nop_probe;
 void (*devtool_sptps_renewal_probe)(meshlink_node_t *node) = sptps_renewal_nop_probe;
 
-void devtool_get_node_status(meshlink_handle_t *mesh, meshlink_node_t *node, devtool_node_status_t *status) {
-	if(!mesh || !node || !status) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	node_t *internal = (node_t *)node;
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	memcpy(&status->status, &internal->status, sizeof status->status);
-	status->mtu = internal->mtu;
-	status->minmtu = internal->minmtu;
-	status->maxmtu = internal->maxmtu;
-	status->mtuprobes = internal->mtuprobes;
-	status->in_packets = internal->in_packets;
-	status->in_bytes = internal->in_bytes;
-	status->out_packets = internal->out_packets;
-	status->out_bytes = internal->out_bytes;
-
-	// Derive UDP connection status
-	if(internal == mesh->self) {
-		status->udp_status = DEVTOOL_UDP_WORKING;
-	} else if(!internal->status.reachable) {
-		status->udp_status = DEVTOOL_UDP_IMPOSSIBLE;
-	} else if(!internal->status.validkey) {
-		status->udp_status = DEVTOOL_UDP_UNKNOWN;
-	} else if(internal->status.udp_confirmed) {
-		status->udp_status = DEVTOOL_UDP_WORKING;
-	} else if(internal->mtuprobes > 30) {
-		status->udp_status = DEVTOOL_UDP_FAILED;
-	} else if(internal->mtuprobes > 0) {
-		status->udp_status = DEVTOOL_UDP_TRYING;
-	} else {
-		status->udp_status = DEVTOOL_UDP_UNKNOWN;
-	}
-
-	pthread_mutex_unlock(&mesh->mutex);
-}
-
 meshlink_handle_t *devtool_open_in_netns(const char *confbase, const char *name, const char *appname, dev_class_t devclass, int netns) {
 	meshlink_open_params_t *params = meshlink_open_params_init(confbase, name, appname, devclass);
 	params->netns = dup(netns);

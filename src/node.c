@@ -43,8 +43,6 @@ void exit_nodes(meshlink_handle_t *mesh) {
 node_t *new_node(void) {
 	node_t *n = xzalloc(sizeof(*n));
 
-	n->mtu = MTU;
-	n->maxmtu = MTU;
 	n->devclass = DEV_CLASS_UNKNOWN;
 
 	return n;
@@ -57,10 +55,6 @@ void free_node(node_t *n) {
 
 	ecdsa_free(n->ecdsa);
 	sptps_stop(&n->sptps);
-
-	if(n->mtutimeout.cb) {
-		abort();
-	}
 
 	free(n->name);
 	free(n->canonical_address);
@@ -84,7 +78,6 @@ void node_del(meshlink_handle_t *mesh, node_t *n) {
 	}
 
 	assert(mesh->peer && mesh->peer == n);
-	timeout_del(&mesh->loop, &n->mtutimeout);
 	free_node(n);
 	mesh->peer = NULL;
 }

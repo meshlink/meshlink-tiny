@@ -448,28 +448,6 @@ typedef void (*meshlink_node_status_cb_t)(struct meshlink_handle *mesh, struct m
  */
 void meshlink_set_node_status_cb(struct meshlink_handle *mesh, meshlink_node_status_cb_t cb);
 
-/// A callback reporting node path MTU changes.
-/** @param mesh      A handle which represents an instance of MeshLink.
- *  @param node       A pointer to a struct meshlink_node describing the node whose status changed.
- *                    This pointer is valid until meshlink_close() is called.
- *  @param pmtu       The current path MTU to the node, or 0 if UDP communication is not (yet) possible.
- */
-typedef void (*meshlink_node_pmtu_cb_t)(struct meshlink_handle *mesh, struct meshlink_node *node, uint16_t pmtu);
-
-/// Set the node extended status callback.
-/** This functions sets the callback that is called whenever certain connectivity parameters for a node change.
- *  The callback is run in MeshLink's own thread.
- *  It is therefore important that the callback uses apprioriate methods (queues, pipes, locking, etc.)
- *  to hand the data over to the application's thread.
- *  The callback should also not block itself and return as quickly as possible.
- *
- *  \memberof meshlink_handle
- *  @param mesh      A handle which represents an instance of MeshLink.
- *  @param cb        A pointer to the function which will be called when another node's extended status changes.
- *                   If a NULL pointer is given, the callback will be disabled.
- */
-void meshlink_set_node_pmtu_cb(struct meshlink_handle *mesh, meshlink_node_pmtu_cb_t cb);
-
 /// A callback reporting duplicate node detection.
 /** @param mesh       A handle which represents an instance of MeshLink.
  *  @param node       A pointer to a struct meshlink_node describing the node which is duplicate.
@@ -572,7 +550,6 @@ void meshlink_set_error_cb(struct meshlink_handle *mesh, meshlink_error_cb_t cb)
  *  the packet is sent as one unit and is received as one unit,
  *  and that there is no guarantee that the packet will arrive at the destination.
  *  Packets that are too big to be sent over the network as one unit might be dropped, and this function may return an error if this situation can be detected beforehand.
- *  The application should not send packets that are larger than the path MTU, which can be queried with meshlink_get_pmtu().
  *  The application should take care of getting an acknowledgement and retransmission if necessary.
  *
  *  \memberof meshlink_node
@@ -586,22 +563,6 @@ void meshlink_set_error_cb(struct meshlink_handle *mesh, meshlink_error_cb_t cb)
  *                      A return value of true does not guarantee that the message will actually arrive at the destination.
  */
 bool meshlink_send(struct meshlink_handle *mesh, struct meshlink_node *destination, const void *data, size_t len) __attribute__((__warn_unused_result__));
-
-/// Query the maximum packet size that can be sent to a node.
-/** This functions returns the maximum size of packets (path MTU) that can be sent to a specific node with meshlink_send().
- *  The path MTU is a property of the path packets will take to the destination node over the Internet.
- *  It can be different for different destination nodes.
- *  and the path MTU can change at any point in time due to changes in the Internet.
- *  Therefore, although this should only occur rarely, it can still happen that packets that do not exceed this size get dropped.
- *
- *  \memberof meshlink_node
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param destination  A pointer to a struct meshlink_node describing the destination for the data.
- *
- *  @return             The recommended maximum size of packets that are to be sent to the destination node, 0 if the node is unreachable,
- *                      or a negative value in case of an error.
- */
-ssize_t meshlink_get_pmtu(struct meshlink_handle *mesh, struct meshlink_node *destination) __attribute__((__warn_unused_result__));
 
 /// Get a handle for our own node.
 /** This function returns a handle for the local node.

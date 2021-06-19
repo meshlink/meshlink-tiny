@@ -34,7 +34,6 @@ meshlink_get_fingerprint
 meshlink_get_node
 meshlink_get_node_dev_class
 meshlink_get_node_reachability
-meshlink_get_pmtu
 meshlink_get_self
 meshlink_hint_address
 meshlink_hint_network_change
@@ -72,7 +71,6 @@ meshlink_set_inviter_commits_first
 meshlink_set_log_cb
 meshlink_set_node_channel_timeout
 meshlink_set_node_duplicate_cb
-meshlink_set_node_pmtu_cb
 meshlink_set_node_status_cb
 meshlink_set_receive_cb
 meshlink_set_scheduling_granularity

@@ -111,7 +111,6 @@ struct meshlink_handle {
 	// Infrequently used callbacks
 	meshlink_node_status_cb_t node_status_cb;
 	meshlink_node_status_cb_t meta_status_cb;
-	meshlink_node_pmtu_cb_t node_pmtu_cb;
 	meshlink_channel_listen_cb_t channel_listen_cb;
 	meshlink_channel_accept_cb_t channel_accept_cb;
 	meshlink_node_duplicate_cb_t node_duplicate_cb;
@@ -186,7 +185,6 @@ typedef struct meshlink_packethdr {
 
 void meshlink_send_from_queue(event_loop_t *loop, void *mesh);
 void update_node_status(meshlink_handle_t *mesh, struct node_t *n);
-void update_node_pmtu(meshlink_handle_t *mesh, struct node_t *n);
 extern meshlink_log_level_t global_log_level;
 extern meshlink_log_cb_t global_log_cb;
 void handle_duplicate_node(meshlink_handle_t *mesh, struct node_t *n);
