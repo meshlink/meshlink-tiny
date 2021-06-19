@@ -1,5 +1,4 @@
 __emutls_v.meshlink_errno
-devtool_get_all_submeshes
 devtool_get_node_status
 devtool_keyrotate_probe
 devtool_open_in_netns
@@ -31,15 +30,12 @@ meshlink_forget_node
 meshlink_get_all_nodes
 meshlink_get_all_nodes_by_dev_class
 meshlink_get_all_nodes_by_last_reachable
-meshlink_get_all_nodes_by_submesh
 meshlink_get_fingerprint
 meshlink_get_node
 meshlink_get_node_dev_class
 meshlink_get_node_reachability
-meshlink_get_node_submesh
 meshlink_get_pmtu
 meshlink_get_self
-meshlink_get_submesh
 meshlink_hint_address
 meshlink_hint_network_change
 meshlink_import
@@ -85,5 +81,4 @@ meshlink_start
 meshlink_stop
 meshlink_set_storage_policy
 meshlink_strerror
-meshlink_submesh_open
 meshlink_verify

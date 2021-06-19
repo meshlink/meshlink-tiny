@@ -23,7 +23,6 @@
 #include "logger.h"
 #include "meshlink_internal.h"
 #include "node.h"
-#include "submesh.h"
 #include "splay_tree.h"
 #include "netutl.h"
 #include "xalloc.h"
@@ -95,39 +94,6 @@ void devtool_get_node_status(meshlink_handle_t *mesh, meshlink_node_t *node, dev
 	}
 
 	pthread_mutex_unlock(&mesh->mutex);
-}
-
-meshlink_submesh_t **devtool_get_all_submeshes(meshlink_handle_t *mesh, meshlink_submesh_t **submeshes, size_t *nmemb) {
-	if(!mesh || !nmemb || (*nmemb && !submeshes)) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return NULL;
-	}
-
-	meshlink_submesh_t **result;
-
-	//lock mesh->nodes
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	*nmemb = mesh->submeshes->count;
-	result = realloc(submeshes, *nmemb * sizeof(*submeshes));
-
-	if(result) {
-		meshlink_submesh_t **p = result;
-
-		for list_each(submesh_t, s, mesh->submeshes) {
-			*p++ = (meshlink_submesh_t *)s;
-		}
-	} else {
-		*nmemb = 0;
-		free(submeshes);
-		meshlink_errno = MESHLINK_ENOMEM;
-	}
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	return result;
 }
 
 meshlink_handle_t *devtool_open_in_netns(const char *confbase, const char *name, const char *appname, dev_class_t devclass, int netns) {

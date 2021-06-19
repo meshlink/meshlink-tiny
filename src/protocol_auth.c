@@ -42,7 +42,7 @@
 extern bool node_write_devclass(meshlink_handle_t *mesh, node_t *n);
 
 bool send_id(meshlink_handle_t *mesh, connection_t *c) {
-	return send_request(mesh, c, NULL, "%d %s %d.%d %s", ID, mesh->self->name, PROT_MAJOR, PROT_MINOR, mesh->appname);
+	return send_request(mesh, c, "%d %s %d.%d %s", ID, mesh->self->name, PROT_MAJOR, PROT_MINOR, mesh->appname);
 }
 
 bool id_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
@@ -143,7 +143,7 @@ bool send_ack(meshlink_handle_t *mesh, connection_t *c) {
 	}
 
 	c->last_ping_time = mesh->loop.now.tv_sec;
-	return send_request(mesh, c, NULL, "%d %s %d %x", ACK, mesh->myport, mesh->devclass, OPTION_PMTU_DISCOVERY | (PROT_MINOR << 24));
+	return send_request(mesh, c, "%d %s %d %x", ACK, mesh->myport, mesh->devclass, OPTION_PMTU_DISCOVERY | (PROT_MINOR << 24));
 }
 
 bool ack_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {

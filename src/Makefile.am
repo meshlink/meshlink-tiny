@@ -60,7 +60,6 @@ libmeshlink_tiny_la_SOURCES = \
 	net_socket.c \
 	netutl.c netutl.h \
 	node.c node.h \
-	submesh.c submesh.h \
 	packmsg.h \
 	prf.c prf.h \
 	protocol.c protocol.h \

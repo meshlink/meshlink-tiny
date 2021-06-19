@@ -27,7 +27,6 @@
 #include "net.h"
 #include "netutl.h"
 #include "node.h"
-#include "submesh.h"
 #include "packmsg.h"
 #include "prf.h"
 #include "protocol.h"
@@ -208,28 +207,19 @@ static bool finalize_join(join_state_t *state, const void *buf, uint16_t len) {
 	}
 
 	char *name = packmsg_get_str_dup(&in);
-	char *submesh_name = packmsg_get_str_dup(&in);
+	packmsg_skip_element(&in); // submesh_name
 	dev_class_t devclass = packmsg_get_int32(&in);
 	uint32_t count = packmsg_get_array(&in);
 
 	if(!name || !check_id(name)) {
 		logger(mesh, MESHLINK_DEBUG, "No valid Name found in invitation!\n");
 		free(name);
-		free(submesh_name);
-		return false;
-	}
-
-	if(!submesh_name || (strcmp(submesh_name, CORE_MESH) && !check_id(submesh_name))) {
-		logger(mesh, MESHLINK_DEBUG, "No valid Submesh found in invitation!\n");
-		free(name);
-		free(submesh_name);
 		return false;
 	}
 
 	if(!count) {
 		logger(mesh, MESHLINK_ERROR, "Incomplete invitation file!\n");
 		free(name);
-		free(submesh_name);
 		return false;
 	}
 
@@ -237,8 +227,6 @@ static bool finalize_join(join_state_t *state, const void *buf, uint16_t len) {
 	free(mesh->self->name);
 	mesh->name = name;
 	mesh->self->name = xstrdup(name);
-	mesh->self->submesh = strcmp(submesh_name, CORE_MESH) ? lookup_or_create_submesh(mesh, submesh_name) : NULL;
-	free(submesh_name);
 	mesh->self->devclass = devclass == DEV_CLASS_UNKNOWN ? mesh->devclass : devclass;
 
 	// Initialize configuration directory
@@ -990,7 +978,6 @@ meshlink_handle_t *meshlink_open_ex(const meshlink_open_params_t *params) {
 	mesh->appname = xstrdup(params->appname);
 	mesh->devclass = params->devclass;
 	mesh->netns = params->netns;
-	mesh->submeshes = NULL;
 	mesh->log_cb = global_log_cb;
 	mesh->log_level = global_log_level;
 	mesh->packet = xmalloc(sizeof(vpn_packet_t));
@@ -1112,35 +1099,6 @@ meshlink_handle_t *meshlink_open_ex(const meshlink_open_params_t *params) {
 
 	logger(NULL, MESHLINK_DEBUG, "meshlink_open returning\n");
 	return mesh;
-}
-
-meshlink_submesh_t *meshlink_submesh_open(meshlink_handle_t *mesh, const char *submesh) {
-	logger(NULL, MESHLINK_DEBUG, "meshlink_submesh_open(%s)", submesh);
-
-	meshlink_submesh_t *s = NULL;
-
-	if(!mesh) {
-		logger(NULL, MESHLINK_ERROR, "No mesh handle given!\n");
-		meshlink_errno = MESHLINK_EINVAL;
-		return NULL;
-	}
-
-	if(!submesh || !*submesh) {
-		logger(NULL, MESHLINK_ERROR, "No submesh name given!\n");
-		meshlink_errno = MESHLINK_EINVAL;
-		return NULL;
-	}
-
-	//lock mesh->nodes
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	s = (meshlink_submesh_t *)create_submesh(mesh, submesh);
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	return s;
 }
 
 static void *meshlink_main_loop(void *arg) {
@@ -1745,28 +1703,6 @@ meshlink_node_t *meshlink_get_node(meshlink_handle_t *mesh, const char *name) {
 	return (meshlink_node_t *)n;
 }
 
-meshlink_submesh_t *meshlink_get_submesh(meshlink_handle_t *mesh, const char *name) {
-	if(!mesh || !name) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return NULL;
-	}
-
-	meshlink_submesh_t *submesh = NULL;
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	submesh = (meshlink_submesh_t *)lookup_submesh(mesh, name);
-	pthread_mutex_unlock(&mesh->mutex);
-
-	if(!submesh) {
-		meshlink_errno = MESHLINK_ENOENT;
-	}
-
-	return submesh;
-}
-
 meshlink_node_t **meshlink_get_all_nodes(meshlink_handle_t *mesh, meshlink_node_t **nodes, size_t *nmemb) {
 	if(!mesh || !nmemb || (*nmemb && !nodes)) {
 		meshlink_errno = MESHLINK_EINVAL;
@@ -1852,13 +1788,6 @@ static bool search_node_by_dev_class(const node_t *node, const void *condition) 
 	return false;
 }
 
-static bool search_node_by_submesh(const node_t *node, const void *condition) {
-	if(condition == node->submesh) {
-		return true;
-	}
-
-	return false;
-}
 
 struct time_range {
 	time_t start;
@@ -1872,15 +1801,6 @@ meshlink_node_t **meshlink_get_all_nodes_by_dev_class(meshlink_handle_t *mesh, d
 	}
 
 	return meshlink_get_all_nodes_by_condition(mesh, &devclass, nodes, nmemb, search_node_by_dev_class);
-}
-
-meshlink_node_t **meshlink_get_all_nodes_by_submesh(meshlink_handle_t *mesh, meshlink_submesh_t *submesh, meshlink_node_t **nodes, size_t *nmemb) {
-	if(!mesh || !submesh || !nmemb) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return NULL;
-	}
-
-	return meshlink_get_all_nodes_by_condition(mesh, submesh, nodes, nmemb, search_node_by_submesh);
 }
 
 dev_class_t meshlink_get_node_dev_class(meshlink_handle_t *mesh, meshlink_node_t *node) {
@@ -1900,21 +1820,6 @@ dev_class_t meshlink_get_node_dev_class(meshlink_handle_t *mesh, meshlink_node_t
 	pthread_mutex_unlock(&mesh->mutex);
 
 	return devclass;
-}
-
-meshlink_submesh_t *meshlink_get_node_submesh(meshlink_handle_t *mesh, meshlink_node_t *node) {
-	if(!mesh || !node) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return NULL;
-	}
-
-	node_t *n = (node_t *)node;
-
-	meshlink_submesh_t *s;
-
-	s = (meshlink_submesh_t *)n->submesh;
-
-	return s;
 }
 
 bool meshlink_get_node_reachability(struct meshlink_handle *mesh, struct meshlink_node *node, time_t *last_reachable, time_t *last_unreachable) {

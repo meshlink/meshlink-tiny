@@ -58,7 +58,7 @@ bool key_changed_h(meshlink_handle_t *mesh, connection_t *c, const char *request
 
 	/* Tell the others */
 
-	forward_request(mesh, c, NULL, request);
+	forward_request(mesh, c, request);
 
 	return true;
 }
@@ -80,7 +80,7 @@ static bool send_initial_sptps_data(void *handle, uint8_t type, const void *data
 	to->sptps.send_data = send_sptps_data;
 	char buf[len * 4 / 3 + 5];
 	b64encode(data, buf, len);
-	return send_request(mesh, to->nexthop->connection, NULL, "%d %s %s %d %s", REQ_KEY, mesh->self->name, to->name, REQ_KEY, buf);
+	return send_request(mesh, to->nexthop->connection, "%d %s %s %d %s", REQ_KEY, mesh->self->name, to->name, REQ_KEY, buf);
 }
 
 bool send_canonical_address(meshlink_handle_t *mesh, node_t *to) {
@@ -88,7 +88,7 @@ bool send_canonical_address(meshlink_handle_t *mesh, node_t *to) {
 		return true;
 	}
 
-	return send_request(mesh, to->nexthop->connection, NULL, "%d %s %s %d %s", REQ_KEY, mesh->self->name, to->name, REQ_CANONICAL, mesh->self->canonical_address);
+	return send_request(mesh, to->nexthop->connection, "%d %s %s %d %s", REQ_KEY, mesh->self->name, to->name, REQ_CANONICAL, mesh->self->canonical_address);
 }
 
 bool send_req_key(meshlink_handle_t *mesh, node_t *to) {
@@ -101,7 +101,7 @@ bool send_req_key(meshlink_handle_t *mesh, node_t *to) {
 		}
 
 		char *pubkey = ecdsa_get_base64_public_key(mesh->private_key);
-		send_request(mesh, to->nexthop->connection, NULL, "%d %s %s %d %s", REQ_KEY, mesh->self->name, to->name, REQ_PUBKEY, pubkey);
+		send_request(mesh, to->nexthop->connection, "%d %s %s %d %s", REQ_KEY, mesh->self->name, to->name, REQ_PUBKEY, pubkey);
 		free(pubkey);
 		return true;
 	}
@@ -156,7 +156,7 @@ static bool req_key_ext_h(meshlink_handle_t *mesh, connection_t *c, const char *
 			}
 		}
 
-		send_request(mesh, from->nexthop->connection, NULL, "%d %s %s %d %s", REQ_KEY, mesh->self->name, from->name, ANS_PUBKEY, pubkey);
+		send_request(mesh, from->nexthop->connection, "%d %s %s %d %s", REQ_KEY, mesh->self->name, from->name, ANS_PUBKEY, pubkey);
 		free(pubkey);
 		return true;
 	}
@@ -200,7 +200,7 @@ static bool req_key_ext_h(meshlink_handle_t *mesh, connection_t *c, const char *
 	case REQ_KEY: {
 		if(!node_read_public_key(mesh, from)) {
 			logger(mesh, MESHLINK_DEBUG, "No ECDSA key known for %s", from->name);
-			send_request(mesh, from->nexthop->connection, NULL, "%d %s %s %d", REQ_KEY, mesh->self->name, from->name, REQ_PUBKEY);
+			send_request(mesh, from->nexthop->connection, "%d %s %s %d", REQ_KEY, mesh->self->name, from->name, REQ_PUBKEY);
 			return true;
 		}
 
@@ -345,7 +345,7 @@ bool req_key_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 			return true;
 		}
 
-		send_request(mesh, to->nexthop->connection, NULL, "%s", request);
+		send_request(mesh, to->nexthop->connection, "%s", request);
 	}
 
 	return true;
@@ -411,7 +411,7 @@ bool ans_key_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 			return false;
 		}
 
-		return send_request(mesh, to->nexthop->connection, NULL, "%s", request);
+		return send_request(mesh, to->nexthop->connection, "%s", request);
 	}
 
 	/* Is this an ANS_KEY informing us of our own reflexive UDP address? */

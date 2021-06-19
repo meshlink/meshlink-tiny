@@ -45,6 +45,8 @@ static const char meshlink_udp_label[] = "MeshLink UDP";
 #define MESHLINK_CONFIG_VERSION 2
 #define MESHLINK_INVITATION_VERSION 2
 
+#define CORE_MESH "."
+
 struct meshlink_open_params {
 	char *confbase;
 	char *lock_filename;
@@ -95,7 +97,6 @@ struct meshlink_handle {
 
 	struct list_t *connections;
 	struct list_t *outgoings;
-	struct list_t *submeshes;
 
 	// Meta-connection-related members
 	struct splay_tree_t *past_request_tree;
@@ -157,12 +158,6 @@ struct meshlink_handle {
 
 /// A handle for a MeshLink node.
 struct meshlink_node {
-	const char *name;
-	void *priv;
-};
-
-/// A handle for a node Sub-Mesh.
-struct meshlink_submesh {
 	const char *name;
 	void *priv;
 };

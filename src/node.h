@@ -21,10 +21,10 @@
 */
 
 #include "event.h"
+#include "meshlink_internal.h"
 #include "sockaddr.h"
 #include "sptps.h"
 #include "utcp.h"
-#include "submesh.h"
 
 typedef struct node_status_t {
 	uint16_t validkey: 1;               /* 1 if we currently have a valid key for him */
@@ -74,7 +74,6 @@ typedef struct node_t {
 
 	// Used for meta-connection I/O, timeouts
 	struct meshlink_handle *mesh;           /* The mesh this node belongs to */
-	struct submesh_t *submesh;              /* Nodes Sub-Mesh Handle*/
 
 	time_t last_req_key;
 

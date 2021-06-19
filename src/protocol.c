@@ -27,7 +27,6 @@
 #include "protocol.h"
 #include "utils.h"
 #include "xalloc.h"
-#include "submesh.h"
 
 /* Jumptable for the request handlers */
 
@@ -79,7 +78,7 @@ bool check_id(const char *id) {
 /* Generic request routines - takes care of logging and error
    detection as well */
 
-bool send_request(meshlink_handle_t *mesh, connection_t *c, const submesh_t *s, const char *format, ...) {
+bool send_request(meshlink_handle_t *mesh, connection_t *c, const char *format, ...) {
 	assert(format);
 	assert(*format);
 
@@ -110,20 +109,14 @@ bool send_request(meshlink_handle_t *mesh, connection_t *c, const submesh_t *s, 
 	request[len++] = '\n';
 
 	if(c == mesh->everyone) {
-
-		if(s) {
-			broadcast_submesh_meta(mesh, NULL, s, request, len);
-		} else {
-			broadcast_meta(mesh, NULL, request, len);
-		}
-
+		broadcast_meta(mesh, NULL, request, len);
 		return true;
 	} else {
 		return send_meta(mesh, c, request, len);
 	}
 }
 
-void forward_request(meshlink_handle_t *mesh, connection_t *from, const submesh_t *s, const char *request) {
+void forward_request(meshlink_handle_t *mesh, connection_t *from, const char *request) {
 	assert(from);
 	assert(request);
 	assert(*request);
@@ -137,11 +130,7 @@ void forward_request(meshlink_handle_t *mesh, connection_t *from, const submesh_
 	memcpy(tmp, request, len);
 	tmp[len] = '\n';
 
-	if(s) {
-		broadcast_submesh_meta(mesh, from, s, tmp, sizeof(tmp));
-	} else {
-		broadcast_meta(mesh, from, tmp, sizeof(tmp));
-	}
+	broadcast_meta(mesh, from, tmp, sizeof(tmp));
 }
 
 bool receive_request(meshlink_handle_t *mesh, connection_t *c, const char *request) {

@@ -30,7 +30,6 @@
 #include "protocol.h"
 #include "utils.h"
 #include "xalloc.h"
-#include "submesh.h"
 
 #if 0
 bool send_add_edge(meshlink_handle_t *mesh, connection_t *c, const edge_t *e, int contradictions) {

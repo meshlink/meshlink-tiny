@@ -26,8 +26,6 @@ bool send_meta(struct meshlink_handle *mesh, struct connection_t *, const char *
 bool send_meta_sptps(void *, uint8_t, const void *, size_t);
 bool receive_meta_sptps(void *, uint8_t, const void *, uint16_t);
 void broadcast_meta(struct meshlink_handle *mesh, struct connection_t *, const char *, int);
-extern void broadcast_submesh_meta(struct meshlink_handle *mesh, connection_t *from, const submesh_t *s,
-                                   const char *buffer, int length);
 bool receive_meta(struct meshlink_handle *mesh, struct connection_t *) __attribute__((__warn_unused_result__));
 
 #endif

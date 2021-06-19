@@ -31,7 +31,6 @@
 #include "route.h"
 #include "utils.h"
 #include "xalloc.h"
-#include "submesh.h"
 
 /// Helper function to start parsing a host config file
 static bool node_get_config(meshlink_handle_t *mesh, node_t *n, config_t *config, packmsg_input_t *in) {
@@ -129,6 +128,8 @@ bool node_read_public_key(meshlink_handle_t *mesh, node_t *n) {
 
 /// Fill in node details from a config blob.
 bool node_read_from_config(meshlink_handle_t *mesh, node_t *n, const config_t *config) {
+	(void)mesh;
+
 	if(n->canonical_address) {
 		return true;
 	}
@@ -157,19 +158,7 @@ bool node_read_from_config(meshlink_handle_t *mesh, node_t *n, const config_t *c
 		n->name = name;
 	}
 
-	char *submesh_name = packmsg_get_str_dup(&in);
-
-	if(!strcmp(submesh_name, CORE_MESH)) {
-		free(submesh_name);
-		n->submesh = NULL;
-	} else {
-		n->submesh = lookup_or_create_submesh(mesh, submesh_name);
-		free(submesh_name);
-
-		if(!n->submesh) {
-			return false;
-		}
-	}
+	packmsg_skip_element(&in); // submesh_name
 
 	n->devclass = packmsg_get_int32(&in);
 	n->status.blacklisted = packmsg_get_bool(&in);
@@ -234,7 +223,7 @@ bool node_write_config(meshlink_handle_t *mesh, node_t *n, bool new_key) {
 
 	packmsg_add_uint32(&out, MESHLINK_CONFIG_VERSION);
 	packmsg_add_str(&out, n->name);
-	packmsg_add_str(&out, n->submesh ? n->submesh->name : CORE_MESH);
+	packmsg_add_str(&out, CORE_MESH);
 	packmsg_add_int32(&out, n->devclass);
 	packmsg_add_bool(&out, n->status.blacklisted);
 
@@ -352,7 +341,6 @@ static bool setup_myself(meshlink_handle_t *mesh) {
 */
 bool setup_network(meshlink_handle_t *mesh) {
 	init_connections(mesh);
-	init_submeshes(mesh);
 	init_nodes(mesh);
 	init_requests(mesh);
 
@@ -378,7 +366,6 @@ void close_network_connections(meshlink_handle_t *mesh) {
 
 	exit_requests(mesh);
 	exit_nodes(mesh);
-	exit_submeshes(mesh);
 	exit_connections(mesh);
 
 	free(mesh->myport);

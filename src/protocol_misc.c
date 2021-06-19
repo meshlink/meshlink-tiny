@@ -51,7 +51,7 @@ bool status_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 }
 
 bool send_error(meshlink_handle_t *mesh, connection_t *c, request_error_t err, const char *message) {
-	send_request(mesh, c, NULL, "%d %d %s", ERROR, err, message);
+	send_request(mesh, c, "%d %d %s", ERROR, err, message);
 	flush_meta(mesh, c);
 	return false;
 }
@@ -88,7 +88,7 @@ bool send_ping(meshlink_handle_t *mesh, connection_t *c) {
 	c->status.pinged = true;
 	c->last_ping_time = mesh->loop.now.tv_sec;
 
-	return send_request(mesh, c, NULL, "%d", PING);
+	return send_request(mesh, c, "%d", PING);
 }
 
 bool ping_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
@@ -101,7 +101,7 @@ bool ping_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 }
 
 bool send_pong(meshlink_handle_t *mesh, connection_t *c) {
-	return send_request(mesh, c, NULL, "%d", PONG);
+	return send_request(mesh, c, "%d", PONG);
 }
 
 bool pong_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {

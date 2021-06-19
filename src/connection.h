@@ -46,7 +46,6 @@ typedef struct connection_status_t {
 #include "ecdsa.h"
 #include "net.h"
 #include "node.h"
-#include "submesh.h"
 
 typedef struct connection_t {
 	char *name;                     /* name he claims to have */
@@ -69,8 +68,6 @@ typedef struct connection_t {
 	time_t last_key_renewal;        /* last time we renewed the SPTPS key */
 
 	struct outgoing_t *outgoing;    /* used to keep track of outgoing connections */
-
-	struct submesh_t *submesh;      /* his submesh handle if available in invitation file */
 
 	// Only used during authentication
 	ecdsa_t *ecdsa;                 /* his public ECDSA key */

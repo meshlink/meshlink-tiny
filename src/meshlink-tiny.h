@@ -54,9 +54,6 @@ typedef struct meshlink_channel meshlink_channel_t;
 /// A struct containing all parameters used for opening a mesh.
 typedef struct meshlink_open_params meshlink_open_params_t;
 
-/// A handle for a MeshLink sub-mesh.
-typedef struct meshlink_submesh meshlink_submesh_t;
-
 /// Code of most recent error encountered.
 typedef enum {
 	MESHLINK_OK,           ///< Everything is fine
@@ -123,11 +120,6 @@ struct meshlink_handle {
 
 struct meshlink_node {
 	const char *const name; ///< Textual name of this node. It is stored in a nul-terminated C string, which is allocated by MeshLink.
-	void *priv;             ///< Private pointer which may be set freely by the application, and is never used or modified by MeshLink.
-};
-
-struct meshlink_submesh {
-	const char *const name; ///< Textual name of this Sub-Mesh. It is stored in a nul-terminated C string, which is allocated by MeshLink.
 	void *priv;             ///< Private pointer which may be set freely by the application, and is never used or modified by MeshLink.
 };
 
@@ -322,22 +314,6 @@ struct meshlink_handle *meshlink_open_encrypted(const char *confbase, const char
  *                  The pointer is valid until meshlink_close() is called.
  */
 struct meshlink_handle *meshlink_open_ephemeral(const char *name, const char *appname, dev_class_t devclass) __attribute__((__warn_unused_result__));
-
-/// Create Sub-Mesh.
-/** This function causes MeshLink to open a new Sub-Mesh network
- *  create a new thread, which will handle all network I/O.
- *
- *  It is allowed to call this function even if MeshLink is already started, in which case it will return true.
- *
- *  \memberof meshlink_handle
- *  @param mesh     A handle which represents an instance of MeshLink.
- *
- *  @param submesh  Name of the new Sub-Mesh to create.
- *
- *  @return         A pointer to a struct meshlink_submesh which represents this instance of SubMesh, or NULL in case of an error.
- *                  The pointer is valid until meshlink_close() is called.
- */
-struct meshlink_submesh *meshlink_submesh_open(struct meshlink_handle *mesh, const char *submesh) __attribute__((__warn_unused_result__));
 
 /// Start MeshLink.
 /** This function causes MeshLink to open network sockets, make outgoing connections, and
@@ -652,20 +628,6 @@ struct meshlink_node *meshlink_get_self(struct meshlink_handle *mesh) __attribut
  */
 struct meshlink_node *meshlink_get_node(struct meshlink_handle *mesh, const char *name) __attribute__((__warn_unused_result__));
 
-/// Get a handle for a specific submesh.
-/** This function returns a handle for the submesh with the given name.
- *
- *  \memberof meshlink_handle
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param name         The name of the submesh for which a handle is requested.
- *                      After this function returns, the application is free to overwrite or free @a name.
- *
- *  @return             A pointer to a struct meshlink_submesh which represents the requested submesh,
- *                      or NULL if the requested submesh does not exist.
- *                      The pointer is guaranteed to be valid until meshlink_close() is called.
- */
-struct meshlink_submesh *meshlink_get_submesh(struct meshlink_handle *mesh, const char *name) __attribute__((__warn_unused_result__));
-
 /// Get the fingerprint of a node's public key.
 /** This function returns a fingerprint of the node's public key.
  *  It should be treated as an opaque blob.
@@ -737,27 +699,6 @@ bool meshlink_sign(struct meshlink_handle *mesh, const void *data, size_t len, v
  */
 struct meshlink_node **meshlink_get_all_nodes_by_dev_class(struct meshlink_handle *mesh, dev_class_t devclass, struct meshlink_node **nodes, size_t *nmemb) __attribute__((__warn_unused_result__));
 
-/// Get the list of all nodes by Submesh.
-/** This function returns a list with handles for all the nodes that matches with the given @a Submesh.
- *
- *  \memberof meshlink_submesh
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param submesh      Submesh handle of the nodes for which the list has to be obtained.
- *  @param nodes        A pointer to a previously allocated array of pointers to struct meshlink_node, or NULL in which case MeshLink will allocate a new array.
- *                      The application can supply an array it allocated itself with malloc, or the return value from the previous call to this function (which is the preferred way).
- *                      The application is allowed to call free() on the array whenever it wishes.
- *                      The pointers in the array are valid until meshlink_close() is called.
- *  @param nmemb        A pointer to a variable holding the number of nodes with the same @a device class that are stored in the array.
- *                      In case the @a nodes argument is not NULL, MeshLink might call realloc() on the array to change its size.
- *                      The contents of this variable will be changed to reflect the new size of the array.
- *
- *  @return             A pointer to an array containing pointers to all known nodes of the given Submesh, or NULL in case of an error.
- *                      If the @a nodes argument was not NULL, then the return value can either be the same value or a different value.
- *                      If it is a new value, the old value of @a nodes should not be used anymore.
- *                      If the new value is NULL, then the old array will have been freed by MeshLink.
- */
-struct meshlink_node **meshlink_get_all_nodes_by_submesh(struct meshlink_handle *mesh, struct meshlink_submesh *submesh, struct meshlink_node **nodes, size_t *nmemb) __attribute__((__warn_unused_result__));
-
 /// Get the list of all nodes by time they were last reachable.
 /** This function returns a list with handles for all the nodes whose last known reachability time overlaps with the given time range.
  *  If the range includes 0, it will count nodes that were never online.
@@ -792,17 +733,6 @@ struct meshlink_node **meshlink_get_all_nodes_by_last_reachable(struct meshlink_
  *  @return              This function returns the device class of the @a node, or -1 in case of an error.
  */
 dev_class_t meshlink_get_node_dev_class(struct meshlink_handle *mesh, struct meshlink_node *node) __attribute__((__warn_unused_result__));
-
-/// Get the node's submesh handle.
-/** This function returns the submesh handle of the given node.
- *
- *  \memberof meshlink_node
- *  @param mesh          A handle which represents an instance of MeshLink.
- *  @param node          A pointer to a struct meshlink_node describing the node.
- *
- *  @return              This function returns the submesh handle of the @a node, or NULL in case of an error.
- */
-struct meshlink_submesh *meshlink_get_node_submesh(struct meshlink_handle *mesh, struct meshlink_node *node) __attribute__((__warn_unused_result__));
 
 /// Get a node's reachability status.
 /** This function returns the current reachability of a given node, and the times of the last state changes.
