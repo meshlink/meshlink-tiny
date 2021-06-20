@@ -30,6 +30,7 @@
 
 void init_connections(meshlink_handle_t *mesh) {
 	assert(!mesh->connection);
+	mesh->connection = NULL;
 }
 
 void exit_connections(meshlink_handle_t *mesh) {

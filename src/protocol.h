@@ -99,6 +99,5 @@ bool del_edge_h(struct meshlink_handle *mesh, struct connection_t *, const char 
 bool key_changed_h(struct meshlink_handle *mesh, struct connection_t *, const char *);
 bool req_key_h(struct meshlink_handle *mesh, struct connection_t *, const char *);
 bool ans_key_h(struct meshlink_handle *mesh, struct connection_t *, const char *);
-bool tcppacket_h(struct meshlink_handle *mesh, struct connection_t *, const char *);
 
 #endif

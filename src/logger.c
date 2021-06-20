@@ -23,6 +23,7 @@
 #include "meshlink_internal.h"
 #include "sptps.h"
 
+#ifndef logger
 // TODO: refactor logging code to use a meshlink_handle_t *.
 void logger(meshlink_handle_t *mesh, meshlink_log_level_t level, const char *format, ...) {
 	assert(format);
@@ -54,3 +55,4 @@ void logger(meshlink_handle_t *mesh, meshlink_log_level_t level, const char *for
 		global_log_cb(NULL, level, message);
 	}
 }
+#endif

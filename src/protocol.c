@@ -47,7 +47,7 @@ static bool (*request_handlers[NUM_REQUESTS])(meshlink_handle_t *, connection_t 
 
 /* Request names */
 
-static const char *request_name[NUM_REQUESTS] = {
+static const char *request_name[NUM_REQUESTS] __attribute__((unused)) = {
 	[ID] = "ID",
 	[ACK] = "ACK",
 	[STATUS] = "STATUS",

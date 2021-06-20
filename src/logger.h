@@ -22,6 +22,10 @@
 
 #include "meshlink_internal.h"
 
+#ifdef NDEBUG
+#define logger(mesh, ...) do {(void)mesh;} while(0)
+#else
 void logger(meshlink_handle_t *mesh, meshlink_log_level_t level, const char *format, ...) __attribute__((__format__(printf, 3, 4)));
+#endif
 
 #endif

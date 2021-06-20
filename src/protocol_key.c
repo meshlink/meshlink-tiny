@@ -34,24 +34,9 @@
 static const int req_key_timeout = 2;
 
 bool key_changed_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
-	assert(request);
-	assert(*request);
-
-	char name[MAX_STRING_SIZE];
-	node_t *n;
-
-	if(sscanf(request, "%*d %*x " MAX_STRING, name) != 1) {
-		logger(mesh, MESHLINK_ERROR, "Got bad %s from %s", "KEY_CHANGED", c->name);
-		return false;
-	}
-
-	n = lookup_node(mesh, name);
-
-	if(!n) {
-		logger(mesh, MESHLINK_ERROR, "Got %s from %s origin %s which does not exist", "KEY_CHANGED", c->name, name);
-		return true;
-	}
-
+	(void)mesh;
+	(void)c;
+	(void)request;
 	return true;
 }
 
@@ -346,6 +331,7 @@ bool req_key_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 bool ans_key_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 	assert(request);
 	assert(*request);
+	(void)c;
 
 	char from_name[MAX_STRING_SIZE];
 	char to_name[MAX_STRING_SIZE];
