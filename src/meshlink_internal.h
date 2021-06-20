@@ -150,20 +150,6 @@ struct meshlink_node {
 	void *priv;
 };
 
-/// An AIO buffer.
-typedef struct meshlink_aio_buffer {
-	const void *data;
-	int fd;
-	size_t len;
-	size_t done;
-	union {
-		meshlink_aio_cb_t buffer;
-		meshlink_aio_fd_cb_t fd;
-	} cb;
-	void *priv;
-	struct meshlink_aio_buffer *next;
-} meshlink_aio_buffer_t;
-
 /// A channel.
 struct meshlink_channel {
 	struct node_t *node;
@@ -171,10 +157,7 @@ struct meshlink_channel {
 	bool in_callback;
 
 	struct utcp_connection *c;
-	meshlink_aio_buffer_t *aio_send;
-	meshlink_aio_buffer_t *aio_receive;
 	meshlink_channel_receive_cb_t receive_cb;
-	meshlink_channel_poll_cb_t poll_cb;
 };
 
 /// Header for data packets routed between nodes

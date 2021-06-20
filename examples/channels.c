@@ -61,13 +61,6 @@ static bool channel_accept(meshlink_handle_t *mesh, meshlink_channel_t *channel,
 	return true;
 }
 
-static void channel_poll(meshlink_handle_t *mesh, meshlink_channel_t *channel, size_t len) {
-	(void)len;
-
-	fprintf(stderr, "Channel to '%s' connected\n", channel->node->name);
-	meshlink_set_channel_poll_cb(mesh, channel, NULL);
-}
-
 static void node_status(meshlink_handle_t *mesh, meshlink_node_t *node, bool reachable) {
 	(void)mesh;
 
@@ -77,9 +70,6 @@ static void node_status(meshlink_handle_t *mesh, meshlink_node_t *node, bool rea
 		printf("%s left.\n", node->name);
 	}
 }
-
-static meshlink_node_t **nodes;
-static size_t nnodes;
 
 static void parse_command(meshlink_handle_t *mesh, char *buf) {
 	char *arg = strchr(buf, ' ');
@@ -105,30 +95,6 @@ static void parse_command(meshlink_handle_t *mesh, char *buf) {
 		if(!meshlink_start(mesh)) {
 			fprintf(stderr, "Could not restart MeshLink: %s\n", meshlink_strerror(meshlink_errno));
 			exit(1);
-		}
-	} else if(!strcasecmp(buf, "who")) {
-		if(!arg) {
-			nodes = meshlink_get_all_nodes(mesh, nodes, &nnodes);
-
-			if(!nnodes) {
-				fprintf(stderr, "Could not get list of nodes: %s\n", meshlink_strerror(meshlink_errno));
-			} else {
-				printf("%zu known nodes:", nnodes);
-
-				for(size_t i = 0; i < nnodes; i++) {
-					printf(" %s", nodes[i]->name);
-				}
-
-				printf("\n");
-			}
-		} else {
-			meshlink_node_t *node = meshlink_get_node(mesh, arg);
-
-			if(!node) {
-				fprintf(stderr, "Error looking up '%s': %s\n", arg, meshlink_strerror(meshlink_errno));
-			} else {
-				printf("Node %s found\n", arg);
-			}
 		}
 	} else if(!strcasecmp(buf, "quit")) {
 		printf("Bye!\n");
@@ -212,7 +178,7 @@ static void parse_input(meshlink_handle_t *mesh, char *buf) {
 
 	if(!channel) {
 		fprintf(stderr, "Opening chat channel to '%s'\n", destination->name);
-		channel = meshlink_channel_open(mesh, destination, CHAT_PORT, channel_receive, NULL, 0);
+		channel = meshlink_channel_open_ex(mesh, destination, CHAT_PORT, channel_receive, NULL, 0, MESHLINK_CHANNEL_UDP);
 
 		if(!channel) {
 			fprintf(stderr, "Could not create channel to '%s': %s\n", destination->name, meshlink_strerror(meshlink_errno));
@@ -220,7 +186,6 @@ static void parse_input(meshlink_handle_t *mesh, char *buf) {
 		}
 
 		destination->priv = channel;
-		meshlink_set_channel_poll_cb(mesh, channel, channel_poll);
 	}
 
 	if(!meshlink_channel_send(mesh, channel, msg, strlen(msg))) {

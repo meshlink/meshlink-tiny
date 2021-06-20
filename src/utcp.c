@@ -182,10 +182,6 @@ static bool fin_wanted(struct utcp_connection *c, uint32_t seq) {
 	}
 }
 
-static bool is_reliable(struct utcp_connection *c) {
-	return c->flags & UTCP_RELIABLE;
-}
-
 static int32_t seqdiff(uint32_t a, uint32_t b) {
 	return a - b;
 }
@@ -320,53 +316,6 @@ static ssize_t buffer_copy(struct buffer *buf, void *data, size_t offset, size_t
 	}
 
 	return len;
-}
-
-// Copy data from the buffer without removing it.
-static ssize_t buffer_call(struct utcp_connection *c, struct buffer *buf, size_t offset, size_t len) {
-	if(!c->recv) {
-		return len;
-	}
-
-	// Ensure we don't copy more than is actually stored in the buffer
-	if(offset >= buf->used) {
-		return 0;
-	}
-
-	if(buf->used - offset < len) {
-		len = buf->used - offset;
-	}
-
-	uint32_t realoffset = buf->offset + offset;
-
-	if(buf->size - buf->offset <= offset) {
-		// The offset wrapped
-		realoffset -= buf->size;
-	}
-
-	if(buf->size - realoffset < len) {
-		// The data is wrapped
-		ssize_t rx1 = c->recv(c, buf->data + realoffset, buf->size - realoffset);
-
-		if(rx1 < buf->size - realoffset) {
-			return rx1;
-		}
-
-		// The channel might have been closed by the previous callback
-		if(!c->recv) {
-			return len;
-		}
-
-		ssize_t rx2 = c->recv(c, buf->data, len - (buf->size - realoffset));
-
-		if(rx2 < 0) {
-			return rx2;
-		} else {
-			return rx1 + rx2;
-		}
-	} else {
-		return c->recv(c, buf->data + realoffset, len);
-	}
 }
 
 // Discard data from the buffer.
@@ -702,7 +651,7 @@ struct utcp_connection *utcp_connect_ex(struct utcp *utcp, uint16_t dst, utcp_re
 		return NULL;
 	}
 
-	assert((flags & ~0x1f) == 0);
+	assert(flags == 0); // UDP only
 
 	c->flags = flags;
 	c->recv = recv;
@@ -738,10 +687,6 @@ struct utcp_connection *utcp_connect_ex(struct utcp *utcp, uint16_t dst, utcp_re
 	return c;
 }
 
-struct utcp_connection *utcp_connect(struct utcp *utcp, uint16_t dst, utcp_recv_t recv, void *priv) {
-	return utcp_connect_ex(utcp, dst, recv, priv, UTCP_TCP);
-}
-
 void utcp_accept(struct utcp_connection *c, utcp_recv_t recv, void *priv) {
 	if(c->reapable || c->state != SYN_RECEIVED) {
 		debug(c, "accept() called on invalid connection in state %s\n", c, strstate[c->state]);
@@ -751,13 +696,12 @@ void utcp_accept(struct utcp_connection *c, utcp_recv_t recv, void *priv) {
 	debug(c, "accepted %p %p\n", c, recv, priv);
 	c->recv = recv;
 	c->priv = priv;
-	c->do_poll = true;
 	set_state(c, ESTABLISHED);
 }
 
 static void ack(struct utcp_connection *c, bool sendatleastone) {
 	int32_t left = seqdiff(c->snd.last, c->snd.nxt);
-	int32_t cwndleft = is_reliable(c) ? min(c->snd.cwnd, c->snd.wnd) - seqdiff(c->snd.nxt, c->snd.una) : MAX_UNRELIABLE_SIZE;
+	int32_t cwndleft = MAX_UNRELIABLE_SIZE;
 
 	assert(left >= 0);
 
@@ -785,7 +729,7 @@ static void ack(struct utcp_connection *c, bool sendatleastone) {
 	pkt->hdr.src = c->src;
 	pkt->hdr.dst = c->dst;
 	pkt->hdr.ack = c->rcv.nxt;
-	pkt->hdr.wnd = is_reliable(c) ? c->rcvbuf.maxsize : 0;
+	pkt->hdr.wnd = 0;
 	pkt->hdr.ctl = ACK;
 	pkt->hdr.aux = 0;
 
@@ -797,14 +741,6 @@ static void ack(struct utcp_connection *c, bool sendatleastone) {
 
 		c->snd.nxt += seglen;
 		left -= seglen;
-
-		if(!is_reliable(c)) {
-			if(left) {
-				pkt->hdr.ctl |= MF;
-			} else {
-				pkt->hdr.ctl &= ~MF;
-			}
-		}
 
 		if(seglen && fin_wanted(c, c->snd.nxt)) {
 			seglen--;
@@ -821,7 +757,7 @@ static void ack(struct utcp_connection *c, bool sendatleastone) {
 		print_packet(c, "send", pkt, sizeof(pkt->hdr) + seglen);
 		c->utcp->send(c->utcp, pkt, sizeof(pkt->hdr) + seglen);
 
-		if(left && !is_reliable(c)) {
+		if(left) {
 			pkt->hdr.wnd += seglen;
 		}
 	} while(left);
@@ -868,25 +804,9 @@ ssize_t utcp_send(struct utcp_connection *c, const void *data, size_t len) {
 		return -1;
 	}
 
-	// Check if we need to be able to buffer all data
-
-	if(c->flags & UTCP_NO_PARTIAL) {
-		if(len > buffer_free(&c->sndbuf)) {
-			if(len > c->sndbuf.maxsize) {
-				errno = EMSGSIZE;
-				return -1;
-			} else {
-				errno = EWOULDBLOCK;
-				return 0;
-			}
-		}
-	}
-
 	// Add data to send buffer.
 
-	if(is_reliable(c)) {
-		len = buffer_put(&c->sndbuf, data, len);
-	} else if(c->state != SYN_SENT && c->state != SYN_RECEIVED) {
+	if(c->state != SYN_SENT && c->state != SYN_RECEIVED) {
 		if(len > MAX_UNRELIABLE_SIZE || buffer_put(&c->sndbuf, data, len) != (ssize_t)len) {
 			errno = EMSGSIZE;
 			return -1;
@@ -896,12 +816,7 @@ ssize_t utcp_send(struct utcp_connection *c, const void *data, size_t len) {
 	}
 
 	if(len <= 0) {
-		if(is_reliable(c)) {
-			errno = EWOULDBLOCK;
-			return 0;
-		} else {
-			return len;
-		}
+		return len;
 	}
 
 	c->snd.last += len;
@@ -914,19 +829,8 @@ ssize_t utcp_send(struct utcp_connection *c, const void *data, size_t len) {
 
 	ack(c, false);
 
-	if(!is_reliable(c)) {
-		c->snd.una = c->snd.nxt = c->snd.last;
-		buffer_discard(&c->sndbuf, c->sndbuf.used);
-	}
-
-	if(is_reliable(c) && !timespec_isset(&c->rtrx_timeout)) {
-		start_retransmit_timer(c);
-	}
-
-	if(is_reliable(c) && !timespec_isset(&c->conn_timeout)) {
-		clock_gettime(UTCP_CLOCK, &c->conn_timeout);
-		c->conn_timeout.tv_sec += c->utcp->timeout;
-	}
+	c->snd.una = c->snd.nxt = c->snd.last;
+	buffer_discard(&c->sndbuf, c->sndbuf.used);
 
 	return len;
 }
@@ -937,51 +841,6 @@ static void swap_ports(struct hdr *hdr) {
 	hdr->dst = tmp;
 }
 
-static void fast_retransmit(struct utcp_connection *c) {
-	if(c->state == CLOSED || c->snd.last == c->snd.una) {
-		debug(c, "fast_retransmit() called but nothing to retransmit!\n");
-		return;
-	}
-
-	struct utcp *utcp = c->utcp;
-
-	struct {
-		struct hdr hdr;
-		uint8_t data[];
-	} *pkt = c->utcp->pkt;
-
-	pkt->hdr.src = c->src;
-	pkt->hdr.dst = c->dst;
-	pkt->hdr.wnd = c->rcvbuf.maxsize;
-	pkt->hdr.aux = 0;
-
-	switch(c->state) {
-	case ESTABLISHED:
-	case FIN_WAIT_1:
-	case CLOSE_WAIT:
-	case CLOSING:
-	case LAST_ACK:
-		// Send unacked data again.
-		pkt->hdr.seq = c->snd.una;
-		pkt->hdr.ack = c->rcv.nxt;
-		pkt->hdr.ctl = ACK;
-		uint32_t len = min(seqdiff(c->snd.last, c->snd.una), utcp->mss);
-
-		if(fin_wanted(c, c->snd.una + len)) {
-			len--;
-			pkt->hdr.ctl |= FIN;
-		}
-
-		buffer_copy(&c->sndbuf, pkt->data, 0, len);
-		print_packet(c, "rtrx", pkt, sizeof(pkt->hdr) + len);
-		utcp->send(utcp, pkt, sizeof(pkt->hdr) + len);
-		break;
-
-	default:
-		break;
-	}
-}
-
 static void retransmit(struct utcp_connection *c) {
 	if(c->state == CLOSED || c->snd.last == c->snd.una) {
 		debug(c, "retransmit() called but nothing to retransmit!\n");
@@ -990,10 +849,6 @@ static void retransmit(struct utcp_connection *c) {
 	}
 
 	struct utcp *utcp = c->utcp;
-
-	if(utcp->retransmit) {
-		utcp->retransmit(c);
-	}
 
 	struct {
 		struct hdr hdr;
@@ -1030,6 +885,8 @@ static void retransmit(struct utcp_connection *c) {
 		break;
 
 	case ESTABLISHED:
+		break;
+
 	case FIN_WAIT_1:
 	case CLOSE_WAIT:
 	case CLOSING:
@@ -1043,19 +900,14 @@ static void retransmit(struct utcp_connection *c) {
 		if(fin_wanted(c, c->snd.una + len)) {
 			len--;
 			pkt->hdr.ctl |= FIN;
+		} else {
+			break;
 		}
 
-		// RFC 5681 slow start after timeout
-		uint32_t flightsize = seqdiff(c->snd.nxt, c->snd.una);
-		c->snd.ssthresh = max(flightsize / 2, utcp->mss * 2); // eq. 4
-		c->snd.cwnd = utcp->mss;
-		debug_cwnd(c);
+		assert(len == 0);
 
-		buffer_copy(&c->sndbuf, pkt->data, 0, len);
 		print_packet(c, "rtrx", pkt, sizeof(pkt->hdr) + len);
 		utcp->send(utcp, pkt, sizeof(pkt->hdr) + len);
-
-		c->snd.nxt = c->snd.una + len;
 		break;
 
 	case CLOSED:
@@ -1084,149 +936,6 @@ cleanup:
 	return;
 }
 
-/* Update receive buffer and SACK entries after consuming data.
- *
- * Situation:
- *
- * |.....0000..1111111111.....22222......3333|
- * |---------------^
- *
- * 0..3 represent the SACK entries. The ^ indicates up to which point we want
- * to remove data from the receive buffer. The idea is to substract "len"
- * from the offset of all the SACK entries, and then remove/cut down entries
- * that are shifted to before the start of the receive buffer.
- *
- * There are three cases:
- * - the SACK entry is after ^, in that case just change the offset.
- * - the SACK entry starts before and ends after ^, so we have to
- *   change both its offset and size.
- * - the SACK entry is completely before ^, in that case delete it.
- */
-static void sack_consume(struct utcp_connection *c, size_t len) {
-	debug(c, "sack_consume %lu\n", (unsigned long)len);
-
-	if(len > c->rcvbuf.used) {
-		debug(c, "all SACK entries consumed\n");
-		c->sacks[0].len = 0;
-		return;
-	}
-
-	buffer_discard(&c->rcvbuf, len);
-
-	for(int i = 0; i < NSACKS && c->sacks[i].len;) {
-		if(len < c->sacks[i].offset) {
-			c->sacks[i].offset -= len;
-			i++;
-		} else if(len < c->sacks[i].offset + c->sacks[i].len) {
-			c->sacks[i].len -= len - c->sacks[i].offset;
-			c->sacks[i].offset = 0;
-			i++;
-		} else {
-			if(i < NSACKS - 1) {
-				memmove(&c->sacks[i], &c->sacks[i + 1], (NSACKS - 1 - i) * sizeof(c->sacks)[i]);
-				c->sacks[NSACKS - 1].len = 0;
-			} else {
-				c->sacks[i].len = 0;
-				break;
-			}
-		}
-	}
-
-	for(int i = 0; i < NSACKS && c->sacks[i].len; i++) {
-		debug(c, "SACK[%d] offset %u len %u\n", i, c->sacks[i].offset, c->sacks[i].len);
-	}
-}
-
-static void handle_out_of_order(struct utcp_connection *c, uint32_t offset, const void *data, size_t len) {
-	debug(c, "out of order packet, offset %u\n", offset);
-	// Packet loss or reordering occured. Store the data in the buffer.
-	ssize_t rxd = buffer_put_at(&c->rcvbuf, offset, data, len);
-
-	if(rxd <= 0) {
-		debug(c, "packet outside receive buffer, dropping\n");
-		return;
-	}
-
-	if((size_t)rxd < len) {
-		debug(c, "packet partially outside receive buffer\n");
-		len = rxd;
-	}
-
-	// Make note of where we put it.
-	for(int i = 0; i < NSACKS; i++) {
-		if(!c->sacks[i].len) { // nothing to merge, add new entry
-			debug(c, "new SACK entry %d\n", i);
-			c->sacks[i].offset = offset;
-			c->sacks[i].len = rxd;
-			break;
-		} else if(offset < c->sacks[i].offset) {
-			if(offset + rxd < c->sacks[i].offset) { // insert before
-				if(!c->sacks[NSACKS - 1].len) { // only if room left
-					debug(c, "insert SACK entry at %d\n", i);
-					memmove(&c->sacks[i + 1], &c->sacks[i], (NSACKS - i - 1) * sizeof(c->sacks)[i]);
-					c->sacks[i].offset = offset;
-					c->sacks[i].len = rxd;
-				} else {
-					debug(c, "SACK entries full, dropping packet\n");
-				}
-
-				break;
-			} else { // merge
-				debug(c, "merge with start of SACK entry at %d\n", i);
-				c->sacks[i].offset = offset;
-				break;
-			}
-		} else if(offset <= c->sacks[i].offset + c->sacks[i].len) {
-			if(offset + rxd > c->sacks[i].offset + c->sacks[i].len) { // merge
-				debug(c, "merge with end of SACK entry at %d\n", i);
-				c->sacks[i].len = offset + rxd - c->sacks[i].offset;
-				// TODO: handle potential merge with next entry
-			}
-
-			break;
-		}
-	}
-
-	for(int i = 0; i < NSACKS && c->sacks[i].len; i++) {
-		debug(c, "SACK[%d] offset %u len %u\n", i, c->sacks[i].offset, c->sacks[i].len);
-	}
-}
-
-static void handle_in_order(struct utcp_connection *c, const void *data, size_t len) {
-	if(c->recv) {
-		ssize_t rxd = c->recv(c, data, len);
-
-		if(rxd != (ssize_t)len) {
-			// TODO: handle the application not accepting all data.
-			abort();
-		}
-	}
-
-	// Check if we can process out-of-order data now.
-	if(c->sacks[0].len && len >= c->sacks[0].offset) {
-		debug(c, "incoming packet len %lu connected with SACK at %u\n", (unsigned long)len, c->sacks[0].offset);
-
-		if(len < c->sacks[0].offset + c->sacks[0].len) {
-			size_t offset = len;
-			len = c->sacks[0].offset + c->sacks[0].len;
-			size_t remainder = len - offset;
-
-			ssize_t rxd = buffer_call(c, &c->rcvbuf, offset, remainder);
-
-			if(rxd != (ssize_t)remainder) {
-				// TODO: handle the application not accepting all data.
-				abort();
-			}
-		}
-	}
-
-	if(c->rcvbuf.used) {
-		sack_consume(c, len);
-	}
-
-	c->rcv.nxt += len;
-}
-
 static void handle_unreliable(struct utcp_connection *c, const struct hdr *hdr, const void *data, size_t len) {
 	// Fast path for unfragmented packets
 	if(!hdr->wnd && !(hdr->ctl & MF)) {
@@ -1237,51 +946,11 @@ static void handle_unreliable(struct utcp_connection *c, const struct hdr *hdr, 
 		c->rcv.nxt = hdr->seq + len;
 		return;
 	}
-
-	// Ensure reassembled packet are not larger than 64 kiB
-	if(hdr->wnd >= MAX_UNRELIABLE_SIZE || hdr->wnd + len > MAX_UNRELIABLE_SIZE) {
-		return;
-	}
-
-	// Don't accept out of order fragments
-	if(hdr->wnd && hdr->seq != c->rcv.nxt) {
-		return;
-	}
-
-	// Reset the receive buffer for the first fragment
-	if(!hdr->wnd) {
-		buffer_clear(&c->rcvbuf);
-	}
-
-	ssize_t rxd = buffer_put_at(&c->rcvbuf, hdr->wnd, data, len);
-
-	if(rxd != (ssize_t)len) {
-		return;
-	}
-
-	// Send the packet if it's the final fragment
-	if(!(hdr->ctl & MF)) {
-		buffer_call(c, &c->rcvbuf, 0, hdr->wnd + len);
-	}
-
-	c->rcv.nxt = hdr->seq + len;
 }
 
 static void handle_incoming_data(struct utcp_connection *c, const struct hdr *hdr, const void *data, size_t len) {
-	if(!is_reliable(c)) {
-		handle_unreliable(c, hdr, data, len);
-		return;
-	}
-
-	uint32_t offset = seqdiff(hdr->seq, c->rcv.nxt);
-
-	if(offset) {
-		handle_out_of_order(c, offset, data, len);
-	} else {
-		handle_in_order(c, data, len);
-	}
+	handle_unreliable(c, hdr, data, len);
 }
-
 
 ssize_t utcp_recv(struct utcp *utcp, const void *data, size_t len) {
 	const uint8_t *ptr = data;
@@ -1416,7 +1085,7 @@ ssize_t utcp_recv(struct utcp *utcp, const void *data, size_t len) {
 
 				c->flags = init[3] & 0x7;
 			} else {
-				c->flags = UTCP_TCP;
+				c->flags = UTCP_UDP;
 			}
 
 synack:
@@ -1497,53 +1166,14 @@ synack:
 		break;
 	}
 
-	// 1b. Discard data that is not in our receive window.
-
-	if(is_reliable(c)) {
-		bool acceptable;
-
-		if(c->state == SYN_SENT) {
-			acceptable = true;
-		} else if(len == 0) {
-			acceptable = seqdiff(hdr.seq, c->rcv.nxt) >= 0;
-		} else {
-			int32_t rcv_offset = seqdiff(hdr.seq, c->rcv.nxt);
-
-			// cut already accepted front overlapping
-			if(rcv_offset < 0) {
-				acceptable = len > (size_t) - rcv_offset;
-
-				if(acceptable) {
-					ptr -= rcv_offset;
-					len += rcv_offset;
-					hdr.seq -= rcv_offset;
-				}
-			} else {
-				acceptable = seqdiff(hdr.seq, c->rcv.nxt) >= 0 && seqdiff(hdr.seq, c->rcv.nxt) + len <= c->rcvbuf.maxsize;
-			}
-		}
-
-		if(!acceptable) {
-			debug(c, "packet not acceptable, %u <= %u + %lu < %u\n", c->rcv.nxt, hdr.seq, (unsigned long)len, c->rcv.nxt + c->rcvbuf.maxsize);
-
-			// Ignore unacceptable RST packets.
-			if(hdr.ctl & RST) {
-				return 0;
-			}
-
-			// Otherwise, continue processing.
-			len = 0;
-		}
-	} else {
 #if UTCP_DEBUG
-		int32_t rcv_offset = seqdiff(hdr.seq, c->rcv.nxt);
+	int32_t rcv_offset = seqdiff(hdr.seq, c->rcv.nxt);
 
-		if(rcv_offset) {
-			debug(c, "packet out of order, offset %u bytes", rcv_offset);
-		}
+	if(rcv_offset) {
+		debug(c, "packet out of order, offset %u bytes", rcv_offset);
+	}
 
 #endif
-	}
 
 	c->snd.wnd = hdr.wnd; // TODO: move below
 
@@ -1551,10 +1181,8 @@ synack:
 	// ackno should not roll back, and it should also not be bigger than what we ever could have sent
 	// (= snd.una + c->sndbuf.used).
 
-	if(!is_reliable(c)) {
-		if(hdr.ack != c->snd.last && c->state >= ESTABLISHED) {
-			hdr.ack = c->snd.una;
-		}
+	if(hdr.ack != c->snd.last && c->state >= ESTABLISHED) {
+		hdr.ack = c->snd.una;
 	}
 
 	// 2. Handle RST packets
@@ -1572,10 +1200,6 @@ synack:
 
 			if(c->recv) {
 				c->recv(c, NULL, 0);
-			}
-
-			if(c->poll && !c->reapable) {
-				c->poll(c, 0);
 			}
 
 			return 0;
@@ -1605,10 +1229,6 @@ synack:
 
 			if(c->recv) {
 				c->recv(c, NULL, 0);
-			}
-
-			if(c->poll && !c->reapable) {
-				c->poll(c, 0);
 			}
 
 			return 0;
@@ -1692,10 +1312,6 @@ synack:
 
 		if(data_acked) {
 			buffer_discard(&c->sndbuf, data_acked);
-
-			if(is_reliable(c)) {
-				c->do_poll = true;
-			}
 		}
 
 		// Also advance snd.nxt if possible
@@ -1748,40 +1364,6 @@ synack:
 		default:
 			break;
 		}
-	} else {
-		if(!len && is_reliable(c) && c->snd.una != c->snd.last) {
-			c->dupack++;
-			debug(c, "duplicate ACK %d\n", c->dupack);
-
-			if(c->dupack == 3) {
-				// RFC 5681 fast recovery
-				debug(c, "fast recovery started\n", c->dupack);
-				uint32_t flightsize = seqdiff(c->snd.nxt, c->snd.una);
-				c->snd.ssthresh = max(flightsize / 2, utcp->mss * 2); // eq. 4
-				c->snd.cwnd = min(c->snd.ssthresh + 3 * utcp->mss, c->sndbuf.maxsize);
-
-				if(c->snd.cwnd > c->sndbuf.maxsize) {
-					c->snd.cwnd = c->sndbuf.maxsize;
-				}
-
-				debug_cwnd(c);
-
-				fast_retransmit(c);
-			} else if(c->dupack > 3) {
-				c->snd.cwnd += utcp->mss;
-
-				if(c->snd.cwnd > c->sndbuf.maxsize) {
-					c->snd.cwnd = c->sndbuf.maxsize;
-				}
-
-				debug_cwnd(c);
-			}
-
-			// We got an ACK which indicates the other side did get one of our packets.
-			// Reset the retransmission timer to avoid going to slow start,
-			// but don't touch the connection timeout.
-			start_retransmit_timer(c);
-		}
 	}
 
 	// 4. Update timers
@@ -1790,10 +1372,6 @@ synack:
 		if(c->snd.una == c->snd.last) {
 			stop_retransmit_timer(c);
 			timespec_clear(&c->conn_timeout);
-		} else if(is_reliable(c)) {
-			start_retransmit_timer(c);
-			clock_gettime(UTCP_CLOCK, &c->conn_timeout);
-			c->conn_timeout.tv_sec += utcp->timeout;
 		}
 	}
 
@@ -1816,7 +1394,6 @@ skip_ack:
 				c->snd.last++;
 				set_state(c, FIN_WAIT_1);
 			} else {
-				c->do_poll = true;
 				set_state(c, ESTABLISHED);
 			}
 
@@ -1905,7 +1482,7 @@ skip_ack:
 
 	// 7. Process FIN stuff
 
-	if((hdr.ctl & FIN) && (!is_reliable(c) || hdr.seq + len == c->rcv.nxt)) {
+	if(hdr.ctl & FIN) {
 		switch(c->state) {
 		case SYN_SENT:
 		case SYN_RECEIVED:
@@ -1960,7 +1537,7 @@ skip_ack:
 	// - or we got an ack, so we should maybe send a bit more data
 	//   -> sendatleastone = false
 
-	if(is_reliable(c) || hdr.ctl & SYN || hdr.ctl & FIN) {
+	if(hdr.ctl & SYN || hdr.ctl & FIN) {
 		ack(c, has_data);
 	}
 
@@ -2120,7 +1697,6 @@ static void set_reapable(struct utcp_connection *c) {
 	set_buffer_storage(&c->rcvbuf, NULL, min(c->rcvbuf.maxsize, DEFAULT_MAXRCVBUFSIZE));
 
 	c->recv = NULL;
-	c->poll = NULL;
 	c->reapable = true;
 }
 
@@ -2143,11 +1719,6 @@ void utcp_reset_all_connections(struct utcp *utcp) {
 		if(c->recv) {
 			errno = 0;
 			c->recv(c, NULL, 0);
-		}
-
-		if(c->poll && !c->reapable) {
-			errno = 0;
-			c->poll(c, 0);
 		}
 	}
 
@@ -2211,29 +1782,12 @@ struct timespec utcp_timeout(struct utcp *utcp) {
 				c->recv(c, NULL, 0);
 			}
 
-			if(c->poll && !c->reapable) {
-				c->poll(c, 0);
-			}
-
 			continue;
 		}
 
 		if(timespec_isset(&c->rtrx_timeout) && timespec_lt(&c->rtrx_timeout, &now)) {
 			debug(c, "retransmitting after timeout\n");
 			retransmit(c);
-		}
-
-		if(c->poll) {
-			if((c->state == ESTABLISHED || c->state == CLOSE_WAIT) && c->do_poll) {
-				c->do_poll = false;
-				uint32_t len = buffer_free(&c->sndbuf);
-
-				if(len) {
-					c->poll(c, len);
-				}
-			} else if(c->state == CLOSED) {
-				c->poll(c, 0);
-			}
 		}
 
 		if(timespec_isset(&c->conn_timeout) && timespec_lt(&c->conn_timeout, &next)) {
@@ -2313,10 +1867,6 @@ void utcp_exit(struct utcp *utcp) {
 
 			if(c->recv) {
 				c->recv(c, NULL, 0);
-			}
-
-			if(c->poll && !c->reapable) {
-				c->poll(c, 0);
 			}
 		}
 
@@ -2434,8 +1984,6 @@ void utcp_set_sndbuf(struct utcp_connection *c, void *data, size_t size) {
 	}
 
 	set_buffer_storage(&c->sndbuf, data, size);
-
-	c->do_poll = is_reliable(c) && buffer_free(&c->sndbuf);
 }
 
 size_t utcp_get_rcvbuf(struct utcp_connection *c) {
@@ -2493,13 +2041,6 @@ size_t utcp_get_outq(struct utcp_connection *c) {
 void utcp_set_recv_cb(struct utcp_connection *c, utcp_recv_t recv) {
 	if(c) {
 		c->recv = recv;
-	}
-}
-
-void utcp_set_poll_cb(struct utcp_connection *c, utcp_poll_t poll) {
-	if(c) {
-		c->poll = poll;
-		c->do_poll = is_reliable(c) && buffer_free(&c->sndbuf);
 	}
 }
 
@@ -2563,10 +2104,6 @@ void utcp_offline(struct utcp *utcp, bool offline) {
 			}
 		}
 	}
-}
-
-void utcp_set_retransmit_cb(struct utcp *utcp, utcp_retransmit_t cb) {
-	utcp->retransmit = cb;
 }
 
 void utcp_set_clock_granularity(long granularity) {

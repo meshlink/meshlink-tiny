@@ -36,7 +36,6 @@
 #define AUX_SAK 3
 #define AUX_TIMESTAMP 4
 
-#define NSACKS 4
 #define DEFAULT_SNDBUFSIZE 0
 #define DEFAULT_MAXSNDBUFSIZE 131072
 #define DEFAULT_RCVBUFSIZE 0
@@ -98,23 +97,16 @@ struct buffer {
 	bool external;
 };
 
-struct sack {
-	uint32_t offset;
-	uint32_t len;
-};
-
 struct utcp_connection {
 	void *priv;
 	struct utcp *utcp;
 	uint32_t flags;
 
 	bool reapable;
-	bool do_poll;
 
 	// Callbacks
 
 	utcp_recv_t recv;
-	utcp_poll_t poll;
 
 	// TCP State
 
@@ -158,7 +150,6 @@ struct utcp_connection {
 	uint32_t prev_free;
 	struct buffer sndbuf;
 	struct buffer rcvbuf;
-	struct sack sacks[NSACKS];
 
 	// Per-socket options
 
@@ -179,7 +170,6 @@ struct utcp {
 
 	utcp_accept_t accept;
 	utcp_listen_t listen;
-	utcp_retransmit_t retransmit;
 	utcp_send_t send;
 
 	// Packet buffer

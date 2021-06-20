@@ -892,16 +892,6 @@ typedef bool (*meshlink_channel_accept_cb_t)(struct meshlink_handle *mesh, struc
  */
 typedef void (*meshlink_channel_receive_cb_t)(struct meshlink_handle *mesh, struct meshlink_channel *channel, const void *data, size_t len);
 
-/// A callback informing the application when data can be sent on a channel.
-/** This function is called whenever there is enough free buffer space so a call to meshlink_channel_send() will succeed.
- *
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param channel      A handle for the channel.
- *  @param len          The maximum amount of data that is guaranteed to be accepted by meshlink_channel_send(),
- *                      or 0 in case of an error.
- */
-typedef void (*meshlink_channel_poll_cb_t)(struct meshlink_handle *mesh, struct meshlink_channel *channel, size_t len);
-
 /// Set the listen callback.
 /** This functions sets the callback that is called whenever another node wants to open a channel to the local node.
  *  The callback is run in MeshLink's own thread.
@@ -1135,101 +1125,6 @@ void meshlink_channel_abort(struct meshlink_handle *mesh, struct meshlink_channe
  *                      0 if the buffer is currently too full, or -1 if len is too big even for an empty buffer.
  */
 ssize_t meshlink_channel_send(struct meshlink_handle *mesh, struct meshlink_channel *channel, const void *data, size_t len) __attribute__((__warn_unused_result__));
-
-/// A callback for cleaning up buffers submitted for asynchronous I/O.
-/** This callbacks signals that MeshLink has finished using this buffer.
- *  The ownership of the buffer is now back into the application's hands.
- *
- *  @param mesh      A handle which represents an instance of MeshLink.
- *  @param channel   A handle for the channel which used this buffer.
- *  @param data      A pointer to a buffer containing the enqueued data.
- *  @param len       The length of the buffer.
- *  @param priv      A private pointer which was set by the application when submitting the buffer.
- */
-typedef void (*meshlink_aio_cb_t)(struct meshlink_handle *mesh, struct meshlink_channel *channel, const void *data, size_t len, void *priv);
-
-/// A callback for asynchronous I/O to and from filedescriptors.
-/** This callbacks signals that MeshLink has finished using this filedescriptor.
- *
- *  @param mesh      A handle which represents an instance of MeshLink.
- *  @param channel   A handle for the channel which used this filedescriptor.
- *  @param fd        The filedescriptor that was used.
- *  @param len       The length of the data that was successfully sent or received.
- *  @param priv      A private pointer which was set by the application when submitting the buffer.
- */
-typedef void (*meshlink_aio_fd_cb_t)(struct meshlink_handle *mesh, struct meshlink_channel *channel, int fd, size_t len, void *priv);
-
-/// Transmit data on a channel asynchronously
-/** This registers a buffer that will be used to send data to the remote node.
- *  Multiple buffers can be registered, in which case data will be sent in the order the buffers were registered.
- *  While there are still buffers with unsent data, the poll callback will not be called.
- *
- *  \memberof meshlink_channel
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param channel      A handle for the channel.
- *  @param data         A pointer to a buffer containing data sent by the source, or NULL if there is no data to send.
- *                      After meshlink_channel_aio_send() returns, the buffer may not be modified or freed by the application
- *                      until the callback routine is called.
- *  @param len          The length of the data, or 0 if there is no data to send.
- *  @param cb           A pointer to the function which will be called when MeshLink has finished using the buffer.
- *  @param priv         A private pointer which is passed unchanged to the callback.
- *
- *  @return             True if the buffer was enqueued, false otherwise.
- */
-bool meshlink_channel_aio_send(struct meshlink_handle *mesh, struct meshlink_channel *channel, const void *data, size_t len, meshlink_aio_cb_t cb, void *priv) __attribute__((__warn_unused_result__));
-
-/// Transmit data on a channel asynchronously from a filedescriptor
-/** This will read up to the specified length number of bytes from the given filedescriptor, and send it over the channel.
- *  The callback may be returned early if there is an error reading from the filedescriptor.
- *  While there is still with unsent data, the poll callback will not be called.
- *
- *  \memberof meshlink_channel
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param channel      A handle for the channel.
- *  @param fd           A file descriptor from which data will be read.
- *  @param len          The length of the data, or 0 if there is no data to send.
- *  @param cb           A pointer to the function which will be called when MeshLink has finished using the filedescriptor.
- *  @param priv         A private pointer which is passed unchanged to the callback.
- *
- *  @return             True if the buffer was enqueued, false otherwise.
- */
-bool meshlink_channel_aio_fd_send(struct meshlink_handle *mesh, struct meshlink_channel *channel, int fd, size_t len, meshlink_aio_fd_cb_t cb, void *priv) __attribute__((__warn_unused_result__));
-
-/// Receive data on a channel asynchronously
-/** This registers a buffer that will be filled with incoming channel data.
- *  Multiple buffers can be registered, in which case data will be received in the order the buffers were registered.
- *  While there are still buffers that have not been filled, the receive callback will not be called.
- *
- *  \memberof meshlink_channel
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param channel      A handle for the channel.
- *  @param data         A pointer to a buffer that will be filled with incoming data.
- *                      After meshlink_channel_aio_receive() returns, the buffer may not be modified or freed by the application
- *                      until the callback routine is called.
- *  @param len          The length of the data.
- *  @param cb           A pointer to the function which will be called when MeshLink has finished using the buffer.
- *  @param priv         A private pointer which is passed unchanged to the callback.
- *
- *  @return             True if the buffer was enqueued, false otherwise.
- */
-bool meshlink_channel_aio_receive(struct meshlink_handle *mesh, struct meshlink_channel *channel, const void *data, size_t len, meshlink_aio_cb_t cb, void *priv) __attribute__((__warn_unused_result__));
-
-/// Receive data on a channel asynchronously and send it to a filedescriptor
-/** This will read up to the specified length number of bytes from the channel, and send it to the filedescriptor.
- *  The callback may be returned early if there is an error writing to the filedescriptor.
- *  While there is still unread data, the receive callback will not be called.
- *
- *  \memberof meshlink_channel
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param channel      A handle for the channel.
- *  @param fd           A file descriptor to which data will be written.
- *  @param len          The length of the data.
- *  @param cb           A pointer to the function which will be called when MeshLink has finished using the filedescriptor.
- *  @param priv         A private pointer which was set by the application when submitting the buffer.
- *
- *  @return             True if the buffer was enqueued, false otherwise.
- */
-bool meshlink_channel_aio_fd_receive(struct meshlink_handle *mesh, struct meshlink_channel *channel, int fd, size_t len, meshlink_aio_fd_cb_t cb, void *priv) __attribute__((__warn_unused_result__));
 
 /// Get channel flags.
 /** This returns the flags used when opening this channel.

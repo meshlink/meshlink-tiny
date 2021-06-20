@@ -106,29 +106,6 @@ typedef void (*channel_receive_cb_t)(mesh *mesh, channel *channel, const void *d
  */
 typedef void (*channel_poll_cb_t)(mesh *mesh, channel *channel, size_t len);
 
-/// A callback for cleaning up buffers submitted for asynchronous I/O.
-/** This callbacks signals that MeshLink has finished using this buffer.
- *  The ownership of the buffer is now back into the application's hands.
- *
- *  @param mesh      A handle which represents an instance of MeshLink.
- *  @param channel   A handle for the channel which used this buffer.
- *  @param data      A pointer to a buffer containing the enqueued data.
- *  @param len       The length of the buffer.
- *  @param priv      A private pointer which was set by the application when submitting the buffer.
- */
-typedef void (*aio_cb_t)(mesh *mesh, channel *channel, const void *data, size_t len, void *priv);
-
-/// A callback for asynchronous I/O to and from filedescriptors.
-/** This callbacks signals that MeshLink has finished using this filedescriptor.
- *
- *  @param mesh      A handle which represents an instance of MeshLink.
- *  @param channel   A handle for the channel which used this filedescriptor.
- *  @param fd        The filedescriptor that was used.
- *  @param len       The length of the data that was successfully sent or received.
- *  @param priv      A private pointer which was set by the application when submitting the buffer.
- */
-typedef void (*aio_fd_cb_t)(mesh *mesh, channel *channel, int fd, size_t len, void *priv);
-
 /// A class describing a MeshLink node.
 class node: public meshlink_node_t {
 };
@@ -584,21 +561,6 @@ public:
 		return meshlink_forget_node(handle, node);
 	}
 
-	/// Set the poll callback.
-	/** This functions sets the callback that is called whenever data can be sent to another node.
-	 *  The callback is run in MeshLink's own thread.
-	 *  It is therefore important that the callback uses apprioriate methods (queues, pipes, locking, etc.)
-	 *  to pass data to or from the application's thread.
-	 *  The callback should also not block itself and return as quickly as possible.
-	 *
-	 *  @param channel   A handle for the channel.
-	 *  @param cb        A pointer to the function which will be called when data can be sent to another node.
-	 *                   If a NULL pointer is given, the callback will be disabled.
-	 */
-	void set_channel_poll_cb(channel *channel, channel_poll_cb_t cb) {
-		meshlink_set_channel_poll_cb(handle, channel, (meshlink_channel_poll_cb_t)cb);
-	}
-
 	/// Set the send buffer size of a channel.
 	/** This function sets the desired size of the send buffer.
 	 *  The default size is 128 kB.
@@ -691,7 +653,6 @@ public:
 	 */
 	channel *channel_open(node *node, uint16_t port, channel_receive_cb_t cb, const void *data, size_t len, uint32_t flags = channel::TCP) {
 		channel *ch = (channel *)meshlink_channel_open_ex(handle, node, port, (meshlink_channel_receive_cb_t)cb, data, len, flags);
-		meshlink_set_channel_poll_cb(handle, ch, &channel_poll_trampoline);
 		return ch;
 	}
 
@@ -716,7 +677,6 @@ public:
 	 */
 	channel *channel_open(node *node, uint16_t port, const void *data, size_t len, uint32_t flags = channel::TCP) {
 		channel *ch = (channel *)meshlink_channel_open_ex(handle, node, port, &channel_receive_trampoline, data, len, flags);
-		meshlink_set_channel_poll_cb(handle, ch, &channel_poll_trampoline);
 		return ch;
 	}
 
@@ -774,78 +734,6 @@ public:
 	 */
 	ssize_t channel_send(channel *channel, void *data, size_t len) {
 		return meshlink_channel_send(handle, channel, data, len);
-	}
-
-	/// Transmit data on a channel asynchronously
-	/** This registers a buffer that will be used to send data to the remote node.
-	 *  Multiple buffers can be registered, in which case data will be sent in the order the buffers were registered.
-	 *  While there are still buffers with unsent data, the poll callback will not be called.
-	 *
-	 *  @param channel      A handle for the channel.
-	 *  @param data         A pointer to a buffer containing data sent by the source, or NULL if there is no data to send.
-	 *                      After meshlink_channel_aio_send() returns, the buffer may not be modified or freed by the application
-	 *                      until the callback routine is called.
-	 *  @param len          The length of the data, or 0 if there is no data to send.
-	 *  @param cb           A pointer to the function which will be called when MeshLink has finished using the buffer.
-	 *  @param priv         A private pointer which was set by the application when submitting the buffer.
-	 *
-	 *  @return             True if the buffer was enqueued, false otherwise.
-	 */
-	bool channel_aio_send(channel *channel, const void *data, size_t len, meshlink_aio_cb_t cb, void *priv) {
-		return meshlink_channel_aio_send(handle, channel, data, len, cb, priv);
-	}
-
-	/// Transmit data on a channel asynchronously from a filedescriptor
-	/** This will read up to the specified length number of bytes from the given filedescriptor, and send it over the channel.
-	 *  The callback may be returned early if there is an error reading from the filedescriptor.
-	 *  While there is still with unsent data, the poll callback will not be called.
-	 *
-	 *  @param channel      A handle for the channel.
-	 *  @param fd           A file descriptor from which data will be read.
-	 *  @param len          The length of the data, or 0 if there is no data to send.
-	 *  @param cb           A pointer to the function which will be called when MeshLink has finished using the filedescriptor.
-	 *  @param priv         A private pointer which was set by the application when submitting the buffer.
-	 *
-	 *  @return             True if the buffer was enqueued, false otherwise.
-	 */
-	bool channel_aio_fd_send(channel *channel, int fd, size_t len, meshlink_aio_fd_cb_t cb, void *priv) {
-		return meshlink_channel_aio_fd_send(handle, channel, fd, len, cb, priv);
-	}
-
-	/// Receive data on a channel asynchronously
-	/** This registers a buffer that will be filled with incoming channel data.
-	 *  Multiple buffers can be registered, in which case data will be received in the order the buffers were registered.
-	 *  While there are still buffers that have not been filled, the receive callback will not be called.
-	 *
-	 *  @param channel      A handle for the channel.
-	 *  @param data         A pointer to a buffer that will be filled with incoming data.
-	 *                      After meshlink_channel_aio_receive() returns, the buffer may not be modified or freed by the application
-	 *                      until the callback routine is called.
-	 *  @param len          The length of the data.
-	 *  @param cb           A pointer to the function which will be called when MeshLink has finished using the buffer.
-	 *  @param priv         A private pointer which was set by the application when submitting the buffer.
-	 *
-	 *  @return             True if the buffer was enqueued, false otherwise.
-	 */
-	bool channel_aio_receive(channel *channel, const void *data, size_t len, meshlink_aio_cb_t cb, void *priv) {
-		return meshlink_channel_aio_receive(handle, channel, data, len, cb, priv);
-	}
-
-	/// Receive data on a channel asynchronously and send it to a filedescriptor
-	/** This will read up to the specified length number of bytes from the channel, and send it to the filedescriptor.
-	 *  The callback may be returned early if there is an error writing to the filedescriptor.
-	 *  While there is still unread data, the receive callback will not be called.
-	 *
-	 *  @param channel      A handle for the channel.
-	 *  @param fd           A file descriptor to which data will be written.
-	 *  @param len          The length of the data.
-	 *  @param cb           A pointer to the function which will be called when MeshLink has finished using the filedescriptor.
-	 *  @param priv         A private pointer which was set by the application when submitting the buffer.
-	 *
-	 *  @return             True if the buffer was enqueued, false otherwise.
-	 */
-	bool channel_aio_fd_receive(channel *channel, int fd, size_t len, meshlink_aio_fd_cb_t cb, void *priv) {
-		return meshlink_channel_aio_fd_receive(handle, channel, fd, len, cb, priv);
 	}
 
 	/// Get the amount of bytes in the send buffer.
@@ -1015,7 +903,6 @@ private:
 
 		if(accepted) {
 			meshlink_set_channel_receive_cb(handle, channel, &channel_receive_trampoline);
-			meshlink_set_channel_poll_cb(handle, channel, &channel_poll_trampoline);
 		}
 
 		return accepted;

@@ -45,30 +45,27 @@ struct utcp_connection;
 #define UTCP_SHUT_WR 1
 #define UTCP_SHUT_RDWR 2
 
-#define UTCP_ORDERED 1
-#define UTCP_RELIABLE 2
-#define UTCP_FRAMED 4
-#define UTCP_DROP_LATE 8
-#define UTCP_NO_PARTIAL 16
+//#define UTCP_ORDERED 1
+//#define UTCP_RELIABLE 2
+//#define UTCP_FRAMED 4
+//#define UTCP_DROP_LATE 8
+//#define UTCP_NO_PARTIAL 16
 
-#define UTCP_TCP 3
+//#define UTCP_TCP 3
 #define UTCP_UDP 0
-#define UTCP_CHANGEABLE_FLAGS 0x18U
+#define UTCP_CHANGEABLE_FLAGS 0x0U
 
 typedef bool (*utcp_listen_t)(struct utcp *utcp, uint16_t port);
 typedef void (*utcp_accept_t)(struct utcp_connection *utcp_connection, uint16_t port);
-typedef void (*utcp_retransmit_t)(struct utcp_connection *connection);
 
 typedef ssize_t (*utcp_send_t)(struct utcp *utcp, const void *data, size_t len);
 typedef ssize_t (*utcp_recv_t)(struct utcp_connection *connection, const void *data, size_t len);
 
-typedef void (*utcp_poll_t)(struct utcp_connection *connection, size_t len);
 
 struct utcp *utcp_init(utcp_accept_t accept, utcp_listen_t listen, utcp_send_t send, void *priv);
 void utcp_exit(struct utcp *utcp);
 
 struct utcp_connection *utcp_connect_ex(struct utcp *utcp, uint16_t port, utcp_recv_t recv, void *priv, uint32_t flags);
-struct utcp_connection *utcp_connect(struct utcp *utcp, uint16_t port, utcp_recv_t recv, void *priv);
 void utcp_accept(struct utcp_connection *utcp, utcp_recv_t recv, void *priv);
 ssize_t utcp_send(struct utcp_connection *connection, const void *data, size_t len);
 ssize_t utcp_recv(struct utcp *utcp, const void *data, size_t len);
@@ -77,7 +74,6 @@ int utcp_abort(struct utcp_connection *connection);
 int utcp_shutdown(struct utcp_connection *connection, int how);
 struct timespec utcp_timeout(struct utcp *utcp);
 void utcp_set_recv_cb(struct utcp_connection *connection, utcp_recv_t recv);
-void utcp_set_poll_cb(struct utcp_connection *connection, utcp_poll_t poll);
 void utcp_set_accept_cb(struct utcp *utcp, utcp_accept_t accept, utcp_listen_t listen);
 bool utcp_is_active(struct utcp *utcp);
 void utcp_reset_all_connections(struct utcp *utcp);
@@ -94,7 +90,6 @@ void utcp_set_mtu(struct utcp *utcp, uint16_t mtu);
 void utcp_reset_timers(struct utcp *utcp);
 
 void utcp_offline(struct utcp *utcp, bool offline);
-void utcp_set_retransmit_cb(struct utcp *utcp, utcp_retransmit_t retransmit);
 
 // Per-socket options
 
