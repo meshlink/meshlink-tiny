@@ -939,69 +939,6 @@ void meshlink_set_channel_accept_cb(struct meshlink_handle *mesh, meshlink_chann
  */
 void meshlink_set_channel_receive_cb(struct meshlink_handle *mesh, struct meshlink_channel *channel, meshlink_channel_receive_cb_t cb);
 
-/// Set the poll callback.
-/** This functions sets the callback that is called whenever data can be sent to another node.
- *  The callback is run in MeshLink's own thread.
- *  It is therefore important that the callback uses apprioriate methods (queues, pipes, locking, etc.)
- *  to pass data to or from the application's thread.
- *  The callback should also not block itself and return as quickly as possible.
- *
- *  \memberof meshlink_channel
- *  @param mesh      A handle which represents an instance of MeshLink.
- *  @param channel   A handle for the channel.
- *  @param cb        A pointer to the function which will be called when data can be sent to another node.
- *                   If a NULL pointer is given, the callback will be disabled.
- */
-void meshlink_set_channel_poll_cb(struct meshlink_handle *mesh, struct meshlink_channel *channel, meshlink_channel_poll_cb_t cb);
-
-/// Set the send buffer size of a channel.
-/** This function sets the desired size of the send buffer.
- *  The default size is 128 kB.
- *
- *  \memberof meshlink_channel
- *  @param mesh      A handle which represents an instance of MeshLink.
- *  @param channel   A handle for the channel.
- *  @param size      The desired size for the send buffer.
- */
-void meshlink_set_channel_sndbuf(struct meshlink_handle *mesh, struct meshlink_channel *channel, size_t size);
-
-/// Set the receive buffer size of a channel.
-/** This function sets the desired size of the receive buffer.
- *  The default size is 128 kB.
- *
- *  \memberof meshlink_channel
- *  @param mesh      A handle which represents an instance of MeshLink.
- *  @param channel   A handle for the channel.
- *  @param size      The desired size for the send buffer.
- */
-void meshlink_set_channel_rcvbuf(struct meshlink_handle *mesh, struct meshlink_channel *channel, size_t size);
-
-/// Set the send buffer storage of a channel.
-/** This function provides MeshLink with a send buffer allocated by the application.
- *  The buffer must be valid until the channel is closed or until this function is called again with a NULL pointer for @a buf.
- *
- *  \memberof meshlink_channel
- *  @param mesh      A handle which represents an instance of MeshLink.
- *  @param channel   A handle for the channel.
- *  @param buf       A pointer to the start of the buffer.
- *                   If a NULL pointer is given, MeshLink will use its own internal buffer again.
- *  @param size      The size of the buffer.
- */
-void meshlink_set_channel_sndbuf_storage(struct meshlink_handle *mesh, struct meshlink_channel *channel, void *buf, size_t size);
-
-/// Set the receive buffer storage of a channel.
-/** This function provides MeshLink with a receive buffer allocated by the application.
- *  The buffer must be valid until the channel is closed or until this function is called again with a NULL pointer for @a buf.
- *
- *  \memberof meshlink_channel
- *  @param mesh      A handle which represents an instance of MeshLink.
- *  @param channel   A handle for the channel.
- *  @param buf       A pointer to the start of the buffer.
- *                   If a NULL pointer is given, MeshLink will use its own internal buffer again.
- *  @param size      The size of the buffer.
- */
-void meshlink_set_channel_rcvbuf_storage(struct meshlink_handle *mesh, struct meshlink_channel *channel, void *buf, size_t size);
-
 /// Set the flags of a channel.
 /** This function allows changing some of the channel flags.
  *  Currently only MESHLINK_CHANNEL_NO_PARTIAL and MESHLINK_CHANNEL_DROP_LATE are supported, other flags are ignored.
@@ -1136,30 +1073,6 @@ ssize_t meshlink_channel_send(struct meshlink_handle *mesh, struct meshlink_chan
  *  @return             The flags set for this channel.
  */
 uint32_t meshlink_channel_get_flags(struct meshlink_handle *mesh, struct meshlink_channel *channel) __attribute__((__warn_unused_result__));
-
-/// Get the amount of bytes in the send buffer.
-/** This returns the amount of bytes in the send buffer.
- *  These bytes have not been received by the peer yet.
- *
- *  \memberof meshlink_channel
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param channel      A handle for the channel.
- *
- *  @return             The amount of un-ACKed bytes in the send buffer.
- */
-size_t meshlink_channel_get_sendq(struct meshlink_handle *mesh, struct meshlink_channel *channel) __attribute__((__warn_unused_result__));
-
-/// Get the amount of bytes in the receive buffer.
-/** This returns the amount of bytes in the receive buffer.
- *  These bytes have not been processed by the application yet.
- *
- *  \memberof meshlink_channel
- *  @param mesh         A handle which represents an instance of MeshLink.
- *  @param channel      A handle for the channel.
- *
- *  @return             The amount of bytes in the receive buffer.
- */
-size_t meshlink_channel_get_recvq(struct meshlink_handle *mesh, struct meshlink_channel *channel) __attribute__((__warn_unused_result__));
 
 /// Get the maximum segment size of a channel.
 /** This returns the amount of bytes that can be sent at once for channels with UDP semantics.

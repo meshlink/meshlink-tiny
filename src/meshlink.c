@@ -2379,50 +2379,6 @@ void meshlink_set_channel_accept_cb(meshlink_handle_t *mesh, meshlink_channel_ac
 	pthread_mutex_unlock(&mesh->mutex);
 }
 
-void meshlink_set_channel_sndbuf(meshlink_handle_t *mesh, meshlink_channel_t *channel, size_t size) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_set_channel_sndbuf(%p, %zu)", (void *)channel, size);
-
-	meshlink_set_channel_sndbuf_storage(mesh, channel, NULL, size);
-}
-
-void meshlink_set_channel_rcvbuf(meshlink_handle_t *mesh, meshlink_channel_t *channel, size_t size) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_set_channel_rcvbuf(%p, %zu)", (void *)channel, size);
-
-	meshlink_set_channel_rcvbuf_storage(mesh, channel, NULL, size);
-}
-
-void meshlink_set_channel_sndbuf_storage(meshlink_handle_t *mesh, meshlink_channel_t *channel, void *buf, size_t size) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_set_channel_sndbuf_storage(%p, %p, %zu)", (void *)channel, buf, size);
-
-	if(!mesh || !channel) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	utcp_set_sndbuf(channel->c, buf, size);
-	pthread_mutex_unlock(&mesh->mutex);
-}
-
-void meshlink_set_channel_rcvbuf_storage(meshlink_handle_t *mesh, meshlink_channel_t *channel, void *buf, size_t size) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_set_channel_rcvbuf_storage(%p, %p, %zu)", (void *)channel, buf, size);
-
-	if(!mesh || !channel) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	utcp_set_rcvbuf(channel->c, buf, size);
-	pthread_mutex_unlock(&mesh->mutex);
-}
-
 void meshlink_set_channel_flags(meshlink_handle_t *mesh, meshlink_channel_t *channel, uint32_t flags) {
 	logger(mesh, MESHLINK_DEBUG, "meshlink_set_channel_flags(%p, %u)", (void *)channel, flags);
 
@@ -2612,24 +2568,6 @@ uint32_t meshlink_channel_get_flags(meshlink_handle_t *mesh, meshlink_channel_t 
 	}
 
 	return channel->c->flags;
-}
-
-size_t meshlink_channel_get_sendq(meshlink_handle_t *mesh, meshlink_channel_t *channel) {
-	if(!mesh || !channel) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return -1;
-	}
-
-	return utcp_get_sendq(channel->c);
-}
-
-size_t meshlink_channel_get_recvq(meshlink_handle_t *mesh, meshlink_channel_t *channel) {
-	if(!mesh || !channel) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return -1;
-	}
-
-	return utcp_get_recvq(channel->c);
 }
 
 size_t meshlink_channel_get_mss(meshlink_handle_t *mesh, meshlink_channel_t *channel) {

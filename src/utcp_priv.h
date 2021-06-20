@@ -36,11 +36,6 @@
 #define AUX_SAK 3
 #define AUX_TIMESTAMP 4
 
-#define DEFAULT_SNDBUFSIZE 0
-#define DEFAULT_MAXSNDBUFSIZE 131072
-#define DEFAULT_RCVBUFSIZE 0
-#define DEFAULT_MAXRCVBUFSIZE 131072
-
 #define MAX_UNRELIABLE_SIZE 16777215
 #define DEFAULT_MTU 1000
 
@@ -86,15 +81,6 @@ static const char *strstate[] __attribute__((unused)) = {
 	[CLOSING] = "CLOSING",
 	[LAST_ACK] = "LAST_ACK",
 	[TIME_WAIT] = "TIME_WAIT"
-};
-
-struct buffer {
-	char *data;
-	uint32_t offset;
-	uint32_t used;
-	uint32_t size;
-	uint32_t maxsize;
-	bool external;
 };
 
 struct utcp_connection {
@@ -144,12 +130,6 @@ struct utcp_connection {
 	uint32_t srtt; // usec
 	uint32_t rttvar; // usec
 	uint32_t rto; // usec
-
-	// Buffers
-
-	uint32_t prev_free;
-	struct buffer sndbuf;
-	struct buffer rcvbuf;
 
 	// Per-socket options
 

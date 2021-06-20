@@ -561,30 +561,6 @@ public:
 		return meshlink_forget_node(handle, node);
 	}
 
-	/// Set the send buffer size of a channel.
-	/** This function sets the desired size of the send buffer.
-	 *  The default size is 128 kB.
-	 *
-	 *  @param channel   A handle for the channel.
-	 *  @param size      The desired size for the send buffer.
-	 *                   If a NULL pointer is given, the callback will be disabled.
-	 */
-	void set_channel_sndbuf(channel *channel, size_t size) {
-		meshlink_set_channel_sndbuf(handle, channel, size);
-	}
-
-	/// Set the receive buffer size of a channel.
-	/** This function sets the desired size of the receive buffer.
-	 *  The default size is 128 kB.
-	 *
-	 *  @param channel   A handle for the channel.
-	 *  @param size      The desired size for the send buffer.
-	 *                   If a NULL pointer is given, the callback will be disabled.
-	 */
-	void set_channel_rcvbuf(channel *channel, size_t size) {
-		meshlink_set_channel_rcvbuf(handle, channel, size);
-	}
-
 	/// Set the flags of a channel.
 	/** This function allows changing some of the channel flags.
 	 *  Currently only MESHLINK_CHANNEL_NO_PARTIAL and MESHLINK_CHANNEL_DROP_LATE are supported, other flags are ignored.
@@ -596,30 +572,6 @@ public:
 	 */
 	void set_channel_flags(channel *channel, uint32_t flags) {
 		meshlink_set_channel_flags(handle, channel, flags);
-	}
-
-	/// Set the send buffer storage of a channel.
-	/** This function provides MeshLink with a send buffer allocated by the application.
-	*
-	*  @param channel   A handle for the channel.
-	*  @param buf       A pointer to the start of the buffer.
-	*                   If a NULL pointer is given, MeshLink will use its own internal buffer again.
-	*  @param size      The size of the buffer.
-	*/
-	void set_channel_sndbuf_storage(channel *channel, void *buf, size_t size) {
-		meshlink_set_channel_sndbuf_storage(handle, channel, buf, size);
-	}
-
-	/// Set the receive buffer storage of a channel.
-	/** This function provides MeshLink with a receive buffer allocated by the application.
-	*
-	*  @param channel   A handle for the channel.
-	*  @param buf       A pointer to the start of the buffer.
-	*                   If a NULL pointer is given, MeshLink will use its own internal buffer again.
-	*  @param size      The size of the buffer.
-	*/
-	void set_channel_rcvbuf_storage(channel *channel, void *buf, size_t size) {
-		meshlink_set_channel_rcvbuf_storage(handle, channel, buf, size);
 	}
 
 	/// Set the connection timeout used for channels to the given node.
@@ -734,30 +686,6 @@ public:
 	 */
 	ssize_t channel_send(channel *channel, void *data, size_t len) {
 		return meshlink_channel_send(handle, channel, data, len);
-	}
-
-	/// Get the amount of bytes in the send buffer.
-	/** This returns the amount of bytes in the send buffer.
-	 *  These bytes have not been received by the peer yet.
-	 *
-	 *  @param channel      A handle for the channel.
-	 *
-	 *  @return             The amount of un-ACKed bytes in the send buffer.
-	 */
-	size_t channel_get_sendq(channel *channel) {
-		return meshlink_channel_get_sendq(handle, channel);
-	}
-
-	/// Get the amount of bytes in the receive buffer.
-	/** This returns the amount of bytes in the receive buffer.
-	 *  These bytes have not been processed by the application yet.
-	 *
-	 *  @param channel      A handle for the channel.
-	 *
-	 *  @return             The amount of bytes in the receive buffer.
-	 */
-	size_t channel_get_recvq(channel *channel) {
-		return meshlink_channel_get_recvq(handle, channel);
 	}
 
 	/// Get the maximum segment size of a channel.

@@ -93,24 +93,11 @@ void utcp_offline(struct utcp *utcp, bool offline);
 
 // Per-socket options
 
-size_t utcp_get_sndbuf(struct utcp_connection *connection);
-void utcp_set_sndbuf(struct utcp_connection *connection, void *buf, size_t size);
-size_t utcp_get_sndbuf_free(struct utcp_connection *connection);
-
-size_t utcp_get_rcvbuf(struct utcp_connection *connection);
-void utcp_set_rcvbuf(struct utcp_connection *connection, void *buf, size_t size);
-size_t utcp_get_rcvbuf_free(struct utcp_connection *connection);
-
-size_t utcp_get_sendq(struct utcp_connection *connection);
-size_t utcp_get_recvq(struct utcp_connection *connection);
-
 bool utcp_get_nodelay(struct utcp_connection *connection);
 void utcp_set_nodelay(struct utcp_connection *connection, bool nodelay);
 
 bool utcp_get_keepalive(struct utcp_connection *connection);
 void utcp_set_keepalive(struct utcp_connection *connection, bool keepalive);
-
-size_t utcp_get_outq(struct utcp_connection *connection);
 
 void utcp_expect_data(struct utcp_connection *connection, bool expect);
 
