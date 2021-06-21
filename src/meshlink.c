@@ -30,7 +30,6 @@
 #include "packmsg.h"
 #include "prf.h"
 #include "protocol.h"
-#include "route.h"
 #include "sockaddr.h"
 #include "utils.h"
 #include "xalloc.h"
@@ -490,15 +489,11 @@ static bool ecdsa_keygen(meshlink_handle_t *mesh) {
 
 static struct timespec idle(event_loop_t *loop, void *data) {
 	(void)loop;
-	meshlink_handle_t *mesh = data;
+	(void)data;
 
-	if(mesh->peer && mesh->peer->utcp) {
-		return utcp_timeout(mesh->peer->utcp);
-	} else {
-		return (struct timespec) {
-			3600, 0
-		};
-	}
+	return (struct timespec) {
+		3600, 0
+	};
 }
 
 static bool meshlink_setup(meshlink_handle_t *mesh) {
@@ -1468,56 +1463,6 @@ void meshlink_set_error_cb(struct meshlink_handle *mesh, meshlink_error_cb_t cb)
 	pthread_mutex_unlock(&mesh->mutex);
 }
 
-static bool prepare_packet(meshlink_handle_t *mesh, meshlink_node_t *destination, const void *data, size_t len, vpn_packet_t *packet) {
-	meshlink_packethdr_t *hdr;
-
-	if(len > MAXSIZE - sizeof(*hdr)) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return false;
-	}
-
-	node_t *n = (node_t *)destination;
-
-	if(n->status.blacklisted) {
-		logger(mesh, MESHLINK_ERROR, "Node %s blacklisted, dropping packet\n", n->name);
-		meshlink_errno = MESHLINK_EBLACKLISTED;
-		return false;
-	}
-
-	// Prepare the packet
-	packet->probe = false;
-	packet->tcp = false;
-	packet->len = len + sizeof(*hdr);
-
-	hdr = (meshlink_packethdr_t *)packet->data;
-	memset(hdr, 0, sizeof(*hdr));
-	// leave the last byte as 0 to make sure strings are always
-	// null-terminated if they are longer than the buffer
-	strncpy((char *)hdr->destination, destination->name, sizeof(hdr->destination) - 1);
-	strncpy((char *)hdr->source, mesh->self->name, sizeof(hdr->source) - 1);
-
-	memcpy(packet->data + sizeof(*hdr), data, len);
-
-	return true;
-}
-
-static bool meshlink_send_immediate(meshlink_handle_t *mesh, meshlink_node_t *destination, const void *data, size_t len) {
-	assert(mesh);
-	assert(destination);
-	assert(data);
-	assert(len);
-
-	// Prepare the packet
-	if(!prepare_packet(mesh, destination, data, len, mesh->packet)) {
-		return false;
-	}
-
-	// Send it immediately
-	route(mesh, mesh->self, mesh->packet);
-
-	return true;
-}
-
 bool meshlink_send(meshlink_handle_t *mesh, meshlink_node_t *destination, const void *data, size_t len) {
 	logger(mesh, MESHLINK_DEBUG, "meshlink_send(%s, %p, %zu)", destination ? destination->name : "(null)", data, len);
 
@@ -1531,7 +1476,7 @@ bool meshlink_send(meshlink_handle_t *mesh, meshlink_node_t *destination, const 
 		return true;
 	}
 
-	if(!data) {
+	if(!data || len > MTU) {
 		meshlink_errno = MESHLINK_EINVAL;
 		return false;
 	}
@@ -1544,10 +1489,8 @@ bool meshlink_send(meshlink_handle_t *mesh, meshlink_node_t *destination, const 
 		return false;
 	}
 
-	if(!prepare_packet(mesh, destination, data, len, packet)) {
-		free(packet);
-		return false;
-	}
+	packet->len = len;
+	memcpy(packet->data, data, len);
 
 	// Queue it
 	if(!meshlink_queue_push(&mesh->outpacketqueue, packet)) {
@@ -1572,7 +1515,7 @@ void meshlink_send_from_queue(event_loop_t *loop, void *data) {
 
 	for(vpn_packet_t *packet; (packet = meshlink_queue_pop(&mesh->outpacketqueue));) {
 		logger(mesh, MESHLINK_DEBUG, "Removing packet of %d bytes from packet queue", packet->len);
-		route(mesh, mesh->self, packet);
+		send_raw_packet(mesh, mesh->peer->connection, packet);
 		free(packet);
 	}
 }
@@ -2246,367 +2189,7 @@ void meshlink_hint_address(meshlink_handle_t *mesh, meshlink_node_t *node, const
 	// @TODO do we want to fire off a connection attempt right away?
 }
 
-static bool channel_pre_accept(struct utcp *utcp, uint16_t port) {
-	(void)port;
-	node_t *n = utcp->priv;
-	meshlink_handle_t *mesh = n->mesh;
-
-	if(mesh->channel_accept_cb && mesh->channel_listen_cb) {
-		return mesh->channel_listen_cb(mesh, (meshlink_node_t *)n, port);
-	} else {
-		return mesh->channel_accept_cb;
-	}
-}
-
-static ssize_t channel_recv(struct utcp_connection *connection, const void *data, size_t len) {
-	meshlink_channel_t *channel = connection->priv;
-
-	if(!channel) {
-		abort();
-	}
-
-	node_t *n = channel->node;
-	meshlink_handle_t *mesh = n->mesh;
-
-	if(n->status.destroyed) {
-		meshlink_channel_close(mesh, channel);
-		return len;
-	}
-
-	const char *p = data;
-	size_t left = len;
-
-	if(channel->receive_cb) {
-		channel->receive_cb(mesh, channel, p, left);
-	}
-
-	return len;
-}
-
-static void channel_accept(struct utcp_connection *utcp_connection, uint16_t port) {
-	node_t *n = utcp_connection->utcp->priv;
-
-	if(!n) {
-		abort();
-	}
-
-	meshlink_handle_t *mesh = n->mesh;
-
-	if(!mesh->channel_accept_cb) {
-		return;
-	}
-
-	meshlink_channel_t *channel = xzalloc(sizeof(*channel));
-	channel->node = n;
-	channel->c = utcp_connection;
-
-	if(mesh->channel_accept_cb(mesh, channel, port, NULL, 0)) {
-		utcp_accept(utcp_connection, channel_recv, channel);
-	} else {
-		free(channel);
-	}
-}
-
-static ssize_t channel_send(struct utcp *utcp, const void *data, size_t len) {
-	node_t *n = utcp->priv;
-
-	if(n->status.destroyed) {
-		return -1;
-	}
-
-	meshlink_handle_t *mesh = n->mesh;
-	return meshlink_send_immediate(mesh, (meshlink_node_t *)n, data, len) ? (ssize_t)len : -1;
-}
-
-void meshlink_set_channel_receive_cb(meshlink_handle_t *mesh, meshlink_channel_t *channel, meshlink_channel_receive_cb_t cb) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_set_channel_receive_cb(%p, %p)", (void *)channel, (void *)(intptr_t)cb);
-
-	if(!mesh || !channel) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	channel->receive_cb = cb;
-}
-
-static void channel_receive(meshlink_handle_t *mesh, meshlink_node_t *source, const void *data, size_t len) {
-	(void)mesh;
-	node_t *n = (node_t *)source;
-
-	if(!n->utcp) {
-		abort();
-	}
-
-	utcp_recv(n->utcp, data, len);
-}
-
-void meshlink_set_channel_listen_cb(meshlink_handle_t *mesh, meshlink_channel_listen_cb_t cb) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_set_channel_listen_cb(%p)", (void *)(intptr_t)cb);
-
-	if(!mesh) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	mesh->channel_listen_cb = cb;
-
-	pthread_mutex_unlock(&mesh->mutex);
-}
-
-void meshlink_set_channel_accept_cb(meshlink_handle_t *mesh, meshlink_channel_accept_cb_t cb) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_set_channel_accept_cb(%p)", (void *)(intptr_t)cb);
-
-	if(!mesh) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	mesh->channel_accept_cb = cb;
-	mesh->receive_cb = channel_receive;
-
-	if(mesh->peer) {
-		mesh->peer->utcp = utcp_init(channel_accept, channel_pre_accept, channel_send, mesh->peer);
-	}
-
-	pthread_mutex_unlock(&mesh->mutex);
-}
-
-void meshlink_set_channel_flags(meshlink_handle_t *mesh, meshlink_channel_t *channel, uint32_t flags) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_set_channel_flags(%p, %u)", (void *)channel, flags);
-
-	if(!mesh || !channel) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	utcp_set_flags(channel->c, flags);
-	pthread_mutex_unlock(&mesh->mutex);
-}
-
-meshlink_channel_t *meshlink_channel_open_ex(meshlink_handle_t *mesh, meshlink_node_t *node, uint16_t port, meshlink_channel_receive_cb_t cb, const void *data, size_t len, uint32_t flags) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_channel_open_ex(%s, %u, %p, %p, %zu, %u)", node ? node->name : "(null)", port, (void *)(intptr_t)cb, data, len, flags);
-
-	if(data && len) {
-		abort();        // TODO: handle non-NULL data
-	}
-
-	if(!mesh || !node) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return NULL;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	node_t *n = (node_t *)node;
-
-	if(!n->utcp) {
-		n->utcp = utcp_init(channel_accept, channel_pre_accept, channel_send, n);
-		mesh->receive_cb = channel_receive;
-
-		if(!n->utcp) {
-			meshlink_errno = errno == ENOMEM ? MESHLINK_ENOMEM : MESHLINK_EINTERNAL;
-			pthread_mutex_unlock(&mesh->mutex);
-			return NULL;
-		}
-	}
-
-	if(n->status.blacklisted) {
-		logger(mesh, MESHLINK_ERROR, "Cannot open a channel with blacklisted node\n");
-		meshlink_errno = MESHLINK_EBLACKLISTED;
-		pthread_mutex_unlock(&mesh->mutex);
-		return NULL;
-	}
-
-	meshlink_channel_t *channel = xzalloc(sizeof(*channel));
-	channel->node = n;
-	channel->receive_cb = cb;
-
-	if(data && !len) {
-		channel->priv = (void *)data;
-	}
-
-	channel->c = utcp_connect_ex(n->utcp, port, channel_recv, channel, flags);
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	if(!channel->c) {
-		meshlink_errno = errno == ENOMEM ? MESHLINK_ENOMEM : MESHLINK_EINTERNAL;
-		free(channel);
-		return NULL;
-	}
-
-	return channel;
-}
-
-meshlink_channel_t *meshlink_channel_open(meshlink_handle_t *mesh, meshlink_node_t *node, uint16_t port, meshlink_channel_receive_cb_t cb, const void *data, size_t len) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_channel_open_ex(%s, %u, %p, %p, %zu)", node ? node->name : "(null)", port, (void *)(intptr_t)cb, data, len);
-
-	return meshlink_channel_open_ex(mesh, node, port, cb, data, len, MESHLINK_CHANNEL_TCP);
-}
-
-void meshlink_channel_shutdown(meshlink_handle_t *mesh, meshlink_channel_t *channel, int direction) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_channel_shutdown(%p, %d)", (void *)channel, direction);
-
-	if(!mesh || !channel) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	utcp_shutdown(channel->c, direction);
-	pthread_mutex_unlock(&mesh->mutex);
-}
-
-void meshlink_channel_close(meshlink_handle_t *mesh, meshlink_channel_t *channel) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_channel_close(%p)", (void *)channel);
-
-	if(!mesh || !channel) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	if(channel->c) {
-		utcp_close(channel->c);
-		channel->c = NULL;
-	}
-
-	if(!channel->in_callback) {
-		free(channel);
-	}
-
-	pthread_mutex_unlock(&mesh->mutex);
-}
-
-void meshlink_channel_abort(meshlink_handle_t *mesh, meshlink_channel_t *channel) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_channel_abort(%p)", (void *)channel);
-
-	if(!mesh || !channel) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	if(channel->c) {
-		utcp_abort(channel->c);
-		channel->c = NULL;
-	}
-
-	if(!channel->in_callback) {
-		free(channel);
-	}
-
-	pthread_mutex_unlock(&mesh->mutex);
-}
-
-ssize_t meshlink_channel_send(meshlink_handle_t *mesh, meshlink_channel_t *channel, const void *data, size_t len) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_channel_send(%p, %p, %zu)", (void *)channel, data, len);
-
-	if(!mesh || !channel) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return -1;
-	}
-
-	if(!len) {
-		return 0;
-	}
-
-	if(!data) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return -1;
-	}
-
-	// TODO: more finegrained locking.
-	// Ideally we want to put the data into the UTCP connection's send buffer.
-	// Then, preferably only if there is room in the receiver window,
-	// kick the meshlink thread to go send packets.
-
-	ssize_t retval;
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	retval = utcp_send(channel->c, data, len);
-
-	pthread_mutex_unlock(&mesh->mutex);
-
-	if(retval < 0) {
-		meshlink_errno = MESHLINK_ENETWORK;
-	}
-
-	return retval;
-}
-
-uint32_t meshlink_channel_get_flags(meshlink_handle_t *mesh, meshlink_channel_t *channel) {
-	if(!mesh || !channel) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return -1;
-	}
-
-	return channel->c->flags;
-}
-
-size_t meshlink_channel_get_mss(meshlink_handle_t *mesh, meshlink_channel_t *channel) {
-	if(!mesh || !channel) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return -1;
-	}
-
-	return utcp_get_mss(channel->node->utcp);
-}
-
-void meshlink_set_node_channel_timeout(meshlink_handle_t *mesh, meshlink_node_t *node, int timeout) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_set_node_channel_timeout(%s, %d)", node ? node->name : "(null)", timeout);
-
-	if(!mesh || !node) {
-		meshlink_errno = MESHLINK_EINVAL;
-		return;
-	}
-
-	node_t *n = (node_t *)node;
-
-	if(pthread_mutex_lock(&mesh->mutex) != 0) {
-		abort();
-	}
-
-	if(!n->utcp) {
-		n->utcp = utcp_init(channel_accept, channel_pre_accept, channel_send, n);
-	}
-
-	utcp_set_user_timeout(n->utcp, timeout);
-
-	pthread_mutex_unlock(&mesh->mutex);
-}
-
 void update_node_status(meshlink_handle_t *mesh, node_t *n) {
-	if(n->status.reachable && mesh->channel_accept_cb && !n->utcp) {
-		n->utcp = utcp_init(channel_accept, channel_pre_accept, channel_send, n);
-	}
-
 	if(mesh->node_status_cb) {
 		mesh->node_status_cb(mesh, (meshlink_node_t *)n, n->status.reachable && !n->status.blacklisted);
 	}
@@ -2732,17 +2315,6 @@ void meshlink_set_inviter_commits_first(struct meshlink_handle *mesh, bool invit
 	pthread_mutex_unlock(&mesh->mutex);
 }
 
-void meshlink_set_scheduling_granularity(struct meshlink_handle *mesh, long granularity) {
-	logger(mesh, MESHLINK_DEBUG, "meshlink_set_scheduling_granularity(%ld)", granularity);
-
-	if(!mesh || granularity < 0) {
-		meshlink_errno = EINVAL;
-		return;
-	}
-
-	utcp_set_clock_granularity(granularity);
-}
-
 void meshlink_set_storage_policy(struct meshlink_handle *mesh, meshlink_storage_policy_t policy) {
 	logger(mesh, MESHLINK_DEBUG, "meshlink_set_storage_policy(%d)", policy);
 
@@ -2787,7 +2359,6 @@ void call_error_cb(meshlink_handle_t *mesh, meshlink_errno_t cb_errno) {
 
 static void __attribute__((constructor)) meshlink_init(void) {
 	crypto_init();
-	utcp_set_clock_granularity(10000);
 }
 
 static void __attribute__((destructor)) meshlink_exit(void) {

@@ -57,6 +57,10 @@ typedef enum request_error_t {
 	BLACKLISTED = 1,
 } request_error_t;
 
+/* Protocol support flags */
+
+static const uint32_t PROTOCOL_TINY = 1; // Peer is using meshlink-tiny
+
 /* Maximum size of strings in a request.
  * scanf terminates %2048s with a NUL character,
  * but the NUL character can be written after the 2048th non-NUL character.
@@ -82,8 +86,8 @@ bool send_error(struct meshlink_handle *mesh, struct connection_t *, request_err
 bool send_ping(struct meshlink_handle *mesh, struct connection_t *);
 bool send_pong(struct meshlink_handle *mesh, struct connection_t *);
 bool send_add_edge(struct meshlink_handle *mesh, struct connection_t *, int);
-bool send_req_key(struct meshlink_handle *mesh, struct node_t *);
 bool send_canonical_address(struct meshlink_handle *mesh, struct node_t *);
+bool send_raw_packet(struct meshlink_handle *mesh, struct connection_t *, const vpn_packet_t *);
 
 /* Request handlers  */
 
@@ -99,5 +103,6 @@ bool del_edge_h(struct meshlink_handle *mesh, struct connection_t *, const char 
 bool key_changed_h(struct meshlink_handle *mesh, struct connection_t *, const char *);
 bool req_key_h(struct meshlink_handle *mesh, struct connection_t *, const char *);
 bool ans_key_h(struct meshlink_handle *mesh, struct connection_t *, const char *);
+bool raw_packet_h(struct meshlink_handle *mesh, struct connection_t *, const char *);
 
 #endif

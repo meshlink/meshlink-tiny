@@ -100,3 +100,14 @@ bool pong_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 
 	return true;
 }
+
+bool send_raw_packet(meshlink_handle_t *mesh, connection_t *c, const vpn_packet_t *packet) {
+	return send_request(mesh, c, "%d", PACKET) && send_meta(mesh, c, (const char *)packet->data, packet->len);
+}
+
+bool raw_packet_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
+	(void)mesh;
+	(void)request;
+	c->status.raw_packet = true;
+	return true;
+}

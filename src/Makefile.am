@@ -25,12 +25,7 @@ chacha_poly1305_SOURCES = \
 	chacha-poly1305/chacha-poly1305.c chacha-poly1305/chacha-poly1305.h \
 	chacha-poly1305/poly1305.c chacha-poly1305/poly1305.h
 
-utcp_SOURCES = \
-	utcp.c utcp.h \
-	utcp_priv.h
-
 lib_LTLIBRARIES = libmeshlink-tiny.la
-EXTRA_PROGRAMS = utcp-test
 
 pkginclude_HEADERS = meshlink-tiny++.h meshlink-tiny.h
 
@@ -55,7 +50,6 @@ libmeshlink_tiny_la_SOURCES = \
 	meshlink_queue.h \
 	meta.c meta.h \
 	net.c net.h \
-	net_packet.c \
 	net_setup.c \
 	net_socket.c \
 	netutl.c netutl.h \
@@ -67,7 +61,6 @@ libmeshlink_tiny_la_SOURCES = \
 	protocol_edge.c \
 	protocol_key.c \
 	protocol_misc.c \
-	route.c route.h \
 	sockaddr.h \
 	splay_tree.c splay_tree.h \
 	sptps.c sptps.h \
@@ -77,17 +70,9 @@ libmeshlink_tiny_la_SOURCES = \
 	xoshiro.c xoshiro.h \
 	devtools.c devtools.h \
 	$(ed25519_SOURCES) \
-	$(chacha_poly1305_SOURCES) \
-	$(utcp_SOURCES)
-
-utcp_test_SOURCES = \
-	utcp-test.c \
-	$(utcp_SOURCES)
+	$(chacha_poly1305_SOURCES)
 
 EXTRA_libmeshlink_tiny_la_DEPENDENCIES = $(srcdir)/meshlink.sym
 
 libmeshlink_tiny_la_CFLAGS = $(PTHREAD_CFLAGS) -fPIC -iquote.
 libmeshlink_tiny_la_LDFLAGS += $(PTHREAD_LIBS)
-
-utcp_test_CFLAGS = $(PTHREAD_CFLAGS) -iquote.
-utcp_test_LDFLAGS = $(PTHREAD_LIBS)

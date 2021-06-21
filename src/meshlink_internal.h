@@ -111,8 +111,6 @@ struct meshlink_handle {
 	// Infrequently used callbacks
 	meshlink_node_status_cb_t node_status_cb;
 	meshlink_node_status_cb_t meta_status_cb;
-	meshlink_channel_listen_cb_t channel_listen_cb;
-	meshlink_channel_accept_cb_t channel_accept_cb;
 	meshlink_node_duplicate_cb_t node_duplicate_cb;
 	meshlink_connection_try_cb_t connection_try_cb;
 	meshlink_error_cb_t error_cb;
@@ -149,22 +147,6 @@ struct meshlink_node {
 	const char *name;
 	void *priv;
 };
-
-/// A channel.
-struct meshlink_channel {
-	struct node_t *node;
-	void *priv;
-	bool in_callback;
-
-	struct utcp_connection *c;
-	meshlink_channel_receive_cb_t receive_cb;
-};
-
-/// Header for data packets routed between nodes
-typedef struct meshlink_packethdr {
-	uint8_t destination[16];
-	uint8_t source[16];
-} __attribute__((__packed__)) meshlink_packethdr_t;
 
 void meshlink_send_from_queue(event_loop_t *loop, void *mesh);
 void update_node_status(meshlink_handle_t *mesh, struct node_t *n);

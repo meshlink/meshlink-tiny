@@ -24,7 +24,6 @@
 #include "meshlink_internal.h"
 #include "sockaddr.h"
 #include "sptps.h"
-#include "utcp.h"
 
 typedef struct node_status_t {
 	uint16_t validkey: 1;               /* 1 if we currently have a valid key for him */
@@ -51,16 +50,10 @@ typedef struct node_t {
 	node_status_t status;
 	dev_class_t devclass;
 
-	// Used for packet I/O
 	uint32_t session_id;                    /* Unique ID for this node's currently running process */
-	sptps_t sptps;
-
-	struct utcp *utcp;
 
 	// Used for meta-connection I/O, timeouts
 	struct meshlink_handle *mesh;           /* The mesh this node belongs to */
-
-	time_t last_req_key;
 
 	struct ecdsa *ecdsa;                    /* His public ECDSA key */
 

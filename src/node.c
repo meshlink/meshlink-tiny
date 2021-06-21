@@ -51,10 +51,7 @@ node_t *new_node(void) {
 void free_node(node_t *n) {
 	n->status.destroyed = true;
 
-	utcp_exit(n->utcp);
-
 	ecdsa_free(n->ecdsa);
-	sptps_stop(&n->sptps);
 
 	free(n->name);
 	free(n->canonical_address);

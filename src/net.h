@@ -39,22 +39,9 @@
 #define MAXBUFSIZE ((MAXSIZE * 8) / 6 + 128)
 
 typedef struct vpn_packet_t {
-	uint16_t probe: 1;
-	int16_t tcp: 1;
 	uint16_t len;           /* the actual number of bytes in the `data' field */
 	uint8_t data[MAXSIZE];
 } vpn_packet_t;
-
-/* Packet types when using SPTPS */
-
-#define PKT_COMPRESSED 1
-#define PKT_PROBE 4
-
-typedef enum packet_type_t {
-	PACKET_NORMAL,
-	PACKET_COMPRESSED,
-	PACKET_PROBE
-} packet_type_t;
 
 #include "conf.h"
 #include "list.h"
@@ -88,10 +75,6 @@ void handle_incoming_vpn_data(struct event_loop_t *loop, void *, int);
 void finish_connecting(struct meshlink_handle *mesh, struct connection_t *);
 void do_outgoing_connection(struct meshlink_handle *mesh, struct outgoing_t *);
 void handle_new_meta_connection(struct event_loop_t *loop, void *, int);
-bool send_sptps_data(void *handle, uint8_t type, const void *data, size_t len);
-bool receive_sptps_record(void *handle, uint8_t type, const void *data, uint16_t len) __attribute__((__warn_unused_result__));
-void send_packet(struct meshlink_handle *mesh, struct node_t *, struct vpn_packet_t *);
-char *get_name(struct meshlink_handle *mesh) __attribute__((__warn_unused_result__));
 void load_all_nodes(struct meshlink_handle *mesh);
 bool setup_myself_reloadable(struct meshlink_handle *mesh) __attribute__((__warn_unused_result__));
 bool setup_network(struct meshlink_handle *mesh) __attribute__((__warn_unused_result__));

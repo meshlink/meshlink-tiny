@@ -42,7 +42,7 @@
 extern bool node_write_devclass(meshlink_handle_t *mesh, node_t *n);
 
 bool send_id(meshlink_handle_t *mesh, connection_t *c) {
-	return send_request(mesh, c, "%d %s %d.%d %s", ID, mesh->self->name, PROT_MAJOR, PROT_MINOR, mesh->appname);
+	return send_request(mesh, c, "%d %s %d.%d %s %u", ID, mesh->self->name, PROT_MAJOR, PROT_MINOR, mesh->appname, PROTOCOL_TINY);
 }
 
 bool id_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
@@ -50,8 +50,9 @@ bool id_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 	assert(*request);
 
 	char name[MAX_STRING_SIZE];
+	uint32_t flags;
 
-	if(sscanf(request, "%*d " MAX_STRING " %d.%d", name, &c->protocol_major, &c->protocol_minor) < 2) {
+	if(sscanf(request, "%*d " MAX_STRING " %d.%d %*s %u", name, &c->protocol_major, &c->protocol_minor, &flags) < 4) {
 		logger(mesh, MESHLINK_ERROR, "Got bad %s from %s", "ID", c->name);
 		return false;
 	}
@@ -97,12 +98,6 @@ bool id_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 
 	if(!node_read_public_key(mesh, n)) {
 		logger(mesh, MESHLINK_ERROR, "No key known for peer %s", c->name);
-
-		if(n->status.reachable && !n->status.waitingforkey) {
-			logger(mesh, MESHLINK_INFO, "Requesting key from peer %s", c->name);
-			send_req_key(mesh, n);
-		}
-
 		return false;
 	}
 
@@ -199,12 +194,6 @@ bool ack_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 	send_add_edge(mesh, c, 0);
 	n->status.reachable = true;
 	update_node_status(mesh, c->node);
-
-	/* Request a session key to jump start UDP traffic */
-
-	if(c->status.initiator) {
-		send_req_key(mesh, n);
-	}
 
 	return true;
 }

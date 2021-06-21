@@ -43,6 +43,7 @@ static bool (*request_handlers[NUM_REQUESTS])(meshlink_handle_t *, connection_t 
 	[KEY_CHANGED] = key_changed_h,
 	[REQ_KEY] = req_key_h,
 	[ANS_KEY] = ans_key_h,
+	[PACKET] = raw_packet_h,
 };
 
 /* Request names */
@@ -60,6 +61,7 @@ static const char *request_name[NUM_REQUESTS] __attribute__((unused)) = {
 	[KEY_CHANGED] = "KEY_CHANGED",
 	[REQ_KEY] = "REQ_KEY",
 	[ANS_KEY] = "ANS_KEY",
+	[PACKET] = "PACKET",
 };
 
 bool check_id(const char *id) {

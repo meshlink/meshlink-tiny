@@ -41,6 +41,7 @@ typedef struct connection_status_t {
 	uint16_t invitation: 1;             /* 1 if this is an invitation */
 	uint16_t invitation_used: 1;        /* 1 if the invitation has been consumed */
 	uint16_t initiator: 1;              /* 1 if we initiated this connection */
+	uint16_t raw_packet: 1;             /* 1 if we are expecting a raw packet next */
 } connection_status_t;
 
 #include "ecdsa.h"
@@ -63,6 +64,7 @@ typedef struct connection_t {
 	struct buffer_t outbuf;
 	io_t io;                        /* input/output event on this metadata connection */
 	int allow_request;              /* defined if there's only one request possible */
+	uint16_t packet_len;            /* length of a raw packet being received */
 	time_t last_ping_time;          /* last time we saw some activity from the other end or pinged them */
 	time_t last_key_renewal;        /* last time we renewed the SPTPS key */
 
