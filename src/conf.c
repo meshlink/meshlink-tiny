@@ -483,9 +483,7 @@ bool main_config_lock(meshlink_handle_t *mesh, const char *lock_filename) {
 	fcntl(fileno(mesh->lockfile), F_SETFD, FD_CLOEXEC);
 #endif
 
-#ifdef HAVE_MINGW
-	// TODO: use _locking()?
-#else
+#ifdef HAVE_FLOCK
 
 	if(flock(fileno(mesh->lockfile), LOCK_EX | LOCK_NB) != 0) {
 		logger(NULL, MESHLINK_ERROR, "Cannot lock %s: %s\n", lock_filename, strerror(errno));
