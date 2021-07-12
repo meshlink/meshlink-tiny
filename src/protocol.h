@@ -38,7 +38,7 @@
 typedef enum request_t {
 	ALL = -1, /* Guardian for allow_request */
 	ID = 0, METAKEY, CHALLENGE, CHAL_REPLY, ACK,
-	STATUS, ERROR, TERMREQ,
+	PSTATUS, ERROR, TERMREQ,
 	PING, PONG,
 	ADD_SUBNET, DEL_SUBNET,
 	ADD_EDGE, DEL_EDGE,

@@ -33,7 +33,7 @@
 static bool (*request_handlers[NUM_REQUESTS])(meshlink_handle_t *, connection_t *, const char *) = {
 	[ID] = id_h,
 	[ACK] = ack_h,
-	[STATUS] = status_h,
+	[PSTATUS] = status_h,
 	[ERROR] = error_h,
 	[TERMREQ] = termreq_h,
 	[PING] = ping_h,
@@ -51,7 +51,7 @@ static bool (*request_handlers[NUM_REQUESTS])(meshlink_handle_t *, connection_t 
 static const char *request_name[NUM_REQUESTS] __attribute__((unused)) = {
 	[ID] = "ID",
 	[ACK] = "ACK",
-	[STATUS] = "STATUS",
+	[PSTATUS] = "STATUS",
 	[ERROR] = "ERROR",
 	[TERMREQ] = "TERMREQ",
 	[PING] = "PING",
