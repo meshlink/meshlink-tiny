@@ -174,7 +174,7 @@ static void handle_meta_io(event_loop_t *loop, void *data, int flags) {
 // Build a list of recently seen addresses.
 static struct addrinfo *get_recent_addresses(node_t *n) {
 	struct addrinfo *ai = NULL;
-	struct addrinfo *aip;
+	struct addrinfo *aip = NULL;
 
 	for(int i = 0; i < 5; i++) {
 		if(!n->recent[i].sa.sa_family) {
