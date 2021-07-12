@@ -1,0 +1,16 @@
+To build, you must have the Espressif IoT Development Framework (ESP-IDF)
+installed. You can find it here:
+
+https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/
+
+Make sure you have sourced export.sh so the idf.py command runs correctly. Then
+run these commands:
+
+    idf.py set-target esp32
+    idf.py menuconfig
+
+Go to the "WiFi Configuration" menu and fill in the details matching your WiFi
+network. Then build and flash with:
+
+    idf.py build
+    idf.py -p <serial port device> flash
