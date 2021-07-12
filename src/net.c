@@ -151,7 +151,7 @@ static void periodic_handler(event_loop_t *loop, void *data) {
 	if(mesh->contradicting_del_edge > 100 && mesh->contradicting_add_edge > 100) {
 		logger(mesh, MESHLINK_WARNING, "Possible node with same Name as us! Sleeping %d seconds.", mesh->sleeptime);
 		struct timespec ts = {mesh->sleeptime, 0};
-		nanosleep(&ts, NULL);
+		usleep(ts.tv_sec * 1000000);
 		mesh->sleeptime *= 2;
 
 		if(mesh->sleeptime < 0) {
