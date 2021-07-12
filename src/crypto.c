@@ -23,77 +23,13 @@
 
 //TODO: use a strict random source once to seed a PRNG?
 
-#ifndef HAVE_MINGW
-
-static int random_fd = -1;
-
 void crypto_init(void) {
-	assert(random_fd == -1);
-
-	random_fd = open("/dev/urandom", O_RDONLY);
-
-	if(random_fd < 0) {
-		random_fd = open("/dev/random", O_RDONLY);
-	}
-
-	if(random_fd < 0) {
-		fprintf(stderr, "Could not open source of random numbers: %s\n", strerror(errno));
-		abort();
-	}
+	// TODO: bootloader_random_enable()?
 }
 
 void crypto_exit(void) {
-	assert(random_fd != -1);
-
-	close(random_fd);
-	random_fd = -1;
 }
 
 void randomize(void *out, size_t outlen) {
-	assert(outlen);
-
-	char *ptr = out;
-
-	while(outlen) {
-		size_t len = read(random_fd, ptr, outlen);
-
-		if(len <= 0) {
-			if(errno == EAGAIN || errno == EINTR) {
-				continue;
-			}
-
-			fprintf(stderr, "Could not read random numbers: %s\n", strerror(errno));
-			abort();
-		}
-
-		ptr += len;
-		outlen -= len;
-	}
+	esp_fill_random(out, outlen);
 }
-
-#else
-
-#include <wincrypt.h>
-HCRYPTPROV prov;
-
-void crypto_init(void) {
-	if(!CryptAcquireContext(&prov, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
-		fprintf(stderr, "CryptAcquireContext() failed!\n");
-		abort();
-	}
-}
-
-void crypto_exit(void) {
-	CryptReleaseContext(prov, 0);
-}
-
-void randomize(void *out, size_t outlen) {
-	assert(outlen);
-
-	if(!CryptGenRandom(prov, outlen, out)) {
-		fprintf(stderr, "CryptGenRandom() failed\n");
-		abort();
-	}
-}
-
-#endif
