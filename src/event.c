@@ -192,7 +192,7 @@ static void signalio_handler(event_loop_t *loop, void *data, int flags) {
 	(void)flags;
 	unsigned char signum;
 
-	if(read(loop->pipefd[0], &signum, 1) != 1) {
+	if(recv(loop->pipefd[0], &signum, 1, MSG_DONTWAIT) != 1) {
 		return;
 	}
 
@@ -208,14 +208,32 @@ static void signalio_handler(event_loop_t *loop, void *data, int flags) {
 	}
 }
 
+static struct sockaddr_in loopback = {0};
+
 static void pipe_init(event_loop_t *loop) {
-	int result = pipe(loop->pipefd);
-	assert(result == 0);
+	meshlink_handle_t *mesh = loop->data;
+
+	loop->pipefd[0] = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	loop->pipefd[1] = loop->pipefd[0];
+
+	if(loop->pipefd[0] == -1) {
+		logger(mesh, MESHLINK_ERROR, "Could not create UDP socket");
+		return;
+	}
+
+	loopback.sin_family = AF_INET;
+	loopback.sin_port = 1024;
+	loopback.sin_addr.s_addr = htonl(0x7F000001);
+
+	int result = bind(loop->pipefd[0], (struct sockaddr *)&loopback, sizeof(loopback));
+
+	if(result == -1) {
+		logger(mesh, MESHLINK_ERROR, "Could not bind UDP socket to localhost");
+	}
 
 	if(result == 0) {
 #ifdef O_NONBLOCK
 		fcntl(loop->pipefd[0], F_SETFL, O_NONBLOCK);
-		fcntl(loop->pipefd[1], F_SETFL, O_NONBLOCK);
 #endif
 		io_add(loop, &loop->signalio, signalio_handler, NULL, loop->pipefd[0], IO_READ);
 	}
@@ -225,13 +243,14 @@ static void pipe_exit(event_loop_t *loop) {
 	io_del(loop, &loop->signalio);
 
 	close(loop->pipefd[0]);
-	close(loop->pipefd[1]);
 
 	loop->pipefd[0] = -1;
 	loop->pipefd[1] = -1;
 }
 
 void signal_trigger(event_loop_t *loop, signal_t *sig) {
+	meshlink_handle_t *mesh = loop->data;
+
 #ifdef HAVE_STDATOMIC_H
 
 	if(atomic_flag_test_and_set(&sig->set)) {
@@ -241,7 +260,7 @@ void signal_trigger(event_loop_t *loop, signal_t *sig) {
 #endif
 
 	uint8_t signum = sig->signum;
-	write(loop->pipefd[1], &signum, 1);
+	sendto(loop->pipefd[1], &signum, 1, MSG_DONTWAIT, (struct sockaddr *)&loopback, sizeof(loopback));
 	return;
 }
 
