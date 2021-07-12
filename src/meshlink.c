@@ -1161,7 +1161,7 @@ bool meshlink_start(meshlink_handle_t *mesh) {
 	// Ensure we have a decent amount of stack space. Musl's default of 80 kB is too small.
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
-	pthread_attr_setstacksize(&attr, 1024 * 1024);
+	pthread_attr_setstacksize(&attr, 16 * 1024);
 
 	if(pthread_create(&mesh->thread, &attr, meshlink_main_loop, mesh) != 0) {
 		logger(mesh, MESHLINK_ERROR, "Could not start thread: %s\n", strerror(errno));
