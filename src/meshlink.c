@@ -312,7 +312,9 @@ static bool finalize_join(join_state_t *state, const void *buf, uint16_t len) {
 
 	sptps_send_record(&state->sptps, 1, ecdsa_get_public_key(mesh->private_key), 32);
 
-	logger(mesh, MESHLINK_DEBUG, "Configuration stored in: %s\n", mesh->confbase);
+	if(mesh->confbase) {
+		logger(mesh, MESHLINK_DEBUG, "Configuration stored in: %s\n", mesh->confbase);
+	}
 
 	return true;
 }
