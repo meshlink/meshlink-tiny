@@ -30,7 +30,6 @@ void sockaddr2str(const sockaddr_t *, char **, char **);
 char *sockaddr2hostname(const sockaddr_t *) __attribute__((__malloc__));
 int sockaddrcmp(const sockaddr_t *, const sockaddr_t *) __attribute__((__warn_unused_result__));
 int sockaddrcmp_noport(const sockaddr_t *, const sockaddr_t *) __attribute__((__warn_unused_result__));
-void sockaddrunmap(sockaddr_t *);
 void sockaddrfree(sockaddr_t *);
 void sockaddrcpy(sockaddr_t *, const sockaddr_t *);
 void sockaddrcpy_setport(sockaddr_t *, const sockaddr_t *, uint16_t port);
