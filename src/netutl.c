@@ -42,7 +42,7 @@ struct addrinfo *str2addrinfo(const char *address, const char *service, int sock
 	err = getaddrinfo(address, service, &hint, &ai);
 
 	if(err) {
-		logger(NULL, MESHLINK_WARNING, "Error looking up %s port %s: %s", address, service, err == EAI_SYSTEM ? strerror(errno) : gai_strerror(err));
+		logger(NULL, MESHLINK_WARNING, "Error looking up %s port %s: %s", address, service, strerror(errno));
 		return NULL;
 	}
 
@@ -117,10 +117,9 @@ sockaddr_t str2sockaddr_random(struct meshlink_handle *mesh, const char *address
 }
 
 void sockaddr2str(const sockaddr_t *sa, char **addrstr, char **portstr) {
-	char address[NI_MAXHOST];
-	char port[NI_MAXSERV];
-	char *scopeid;
-	int err;
+	char address[48];
+	char port[16];
+	bool success;
 
 	if(sa->sa.sa_family == AF_UNKNOWN) {
 		if(addrstr) {
@@ -134,17 +133,25 @@ void sockaddr2str(const sockaddr_t *sa, char **addrstr, char **portstr) {
 		return;
 	}
 
-	err = getnameinfo(&sa->sa, SALEN(sa->sa), address, sizeof(address), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
+	switch(sa->sa.sa_family) {
+	case AF_INET:
+		snprintf(port, sizeof port, "%d", sa->in.sin_port);
+		success = inet_ntop(AF_INET, &sa->in.sin_addr, address, sizeof(address));
+		break;
 
-	if(err) {
-		logger(NULL, MESHLINK_ERROR, "Error while translating addresses: %s", err == EAI_SYSTEM ? strerror(errno) : gai_strerror(err));
-		abort();
+	case AF_INET6:
+		snprintf(port, sizeof port, "%d", sa->in6.sin6_port);
+		success = inet_ntop(AF_INET6, &sa->in6.sin6_addr, address, sizeof(address));
+		break;
+
+	default:
+		success = false;
+		break;
 	}
 
-	scopeid = strchr(address, '%');
-
-	if(scopeid) {
-		*scopeid = '\0';        /* Descope. */
+	if(!success) {
+		logger(NULL, MESHLINK_ERROR, "Error while translating addresses: %s", strerror(errno));
+		abort();
 	}
 
 	if(addrstr) {
@@ -158,19 +165,33 @@ void sockaddr2str(const sockaddr_t *sa, char **addrstr, char **portstr) {
 
 char *sockaddr2hostname(const sockaddr_t *sa) {
 	char *str;
-	char address[NI_MAXHOST] = "unknown";
-	char port[NI_MAXSERV] = "unknown";
-	int err;
+	char address[48] = "unknown";
+	char port[16] = "unknown";
+	bool success;
 
 	if(sa->sa.sa_family == AF_UNKNOWN) {
 		xasprintf(&str, "%s port %s", sa->unknown.address, sa->unknown.port);
 		return str;
 	}
 
-	err = getnameinfo(&sa->sa, SALEN(sa->sa), address, sizeof(address), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
+	switch(sa->sa.sa_family) {
+	case AF_INET:
+		snprintf(port, sizeof port, "%d", sa->in.sin_port);
+		success = inet_ntop(AF_INET, &sa->in.sin_addr, address, sizeof(address));
+		break;
 
-	if(err) {
-		logger(NULL, MESHLINK_ERROR, "Error while looking up hostname: %s", err == EAI_SYSTEM ? strerror(errno) : gai_strerror(err));
+	case AF_INET6:
+		snprintf(port, sizeof port, "%d", sa->in6.sin6_port);
+		success = inet_ntop(AF_INET6, &sa->in6.sin6_addr, address, sizeof(address));
+		break;
+
+	default:
+		success = false;
+		break;
+	}
+
+	if(!success) {
+		logger(NULL, MESHLINK_ERROR, "Error while resolving address to hostname: %s", strerror(errno));
 		abort();
 	}
 
@@ -286,13 +307,6 @@ void sockaddrfree(sockaddr_t *a) {
 	if(a->sa.sa_family == AF_UNKNOWN) {
 		free(a->unknown.address);
 		free(a->unknown.port);
-	}
-}
-
-void sockaddrunmap(sockaddr_t *sa) {
-	if(sa->sa.sa_family == AF_INET6 && IN6_IS_ADDR_V4MAPPED(&sa->in6.sin6_addr)) {
-		sa->in.sin_addr.s_addr = ((uint32_t *) & sa->in6.sin6_addr)[3];
-		sa->in.sin_family = AF_INET;
 	}
 }
 
