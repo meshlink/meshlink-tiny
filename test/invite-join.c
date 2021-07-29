@@ -14,6 +14,8 @@
 #include "devtools.h"
 #include "utils.h"
 
+#include "full.h"
+
 static struct sync_flag baz_reachable;
 static struct sync_flag seven_reachable;
 static struct sync_flag commits_first_flag;
@@ -45,6 +47,8 @@ static void inviter_commits_first_cb(bool inviter_first) {
 }
 
 int main(void) {
+	init_full();
+
 	init_sync_flag(&baz_reachable);
 	init_sync_flag(&seven_reachable);
 	init_sync_flag(&commits_first_flag);
@@ -63,7 +67,7 @@ int main(void) {
 
 	// Open thee new meshlink instance.
 
-	meshlink_handle_t *mesh1 = meshlink_open("invite_join_conf.1", "foo", "invite-join", DEV_CLASS_BACKBONE);
+	meshlink_handle_t *mesh1 = full_meshlink_open("invite_join_conf.1", "foo", "invite-join", DEV_CLASS_BACKBONE);
 	assert(mesh1);
 
 	meshlink_handle_t *mesh2 = meshlink_open("invite_join_conf.2", "bar", "invite-join", DEV_CLASS_BACKBONE);
@@ -74,19 +78,19 @@ int main(void) {
 
 	// Have the first instance generate invitations.
 
-	meshlink_set_node_status_cb(mesh1, status_cb);
+	full_meshlink_set_node_status_cb(mesh1, status_cb);
 
-	assert(meshlink_set_canonical_address(mesh1, meshlink_get_self(mesh1), "localhost", NULL));
+	assert(full_meshlink_set_canonical_address(mesh1, full_meshlink_get_self(mesh1), "localhost", NULL));
 
-	char *baz_url = meshlink_invite(mesh1, NULL, "baz");
+	char *baz_url = full_meshlink_invite(mesh1, NULL, "baz");
 	assert(baz_url);
 
-	char *quux_url = meshlink_invite(mesh1, NULL, "quux");
+	char *quux_url = full_meshlink_invite(mesh1, NULL, "quux");
 	assert(quux_url);
 
 	// Check that the second instances cannot join if it is already started
 
-	assert(meshlink_start(mesh1));
+	assert(full_meshlink_start(mesh1));
 	assert(meshlink_start(mesh2));
 	meshlink_errno = MESHLINK_OK;
 	assert(!meshlink_join(mesh2, baz_url));
@@ -104,11 +108,11 @@ int main(void) {
 
 	// Wait for UDP communication to become possible.
 
-	int pmtu = meshlink_get_pmtu(mesh1, meshlink_get_node(mesh1, "baz"));
+	int pmtu = full_meshlink_get_pmtu(mesh1, meshlink_get_node(mesh1, "baz"));
 
 	for(int i = 0; i < 10 && !pmtu; i++) {
 		sleep(1);
-		pmtu = meshlink_get_pmtu(mesh1, meshlink_get_node(mesh1, "baz"));
+		pmtu = full_meshlink_get_pmtu(mesh1, meshlink_get_node(mesh1, "baz"));
 	}
 
 	assert(pmtu);
@@ -120,17 +124,15 @@ int main(void) {
 
 	// Check that nodes cannot join with expired invitations
 
-	meshlink_set_invitation_timeout(mesh1, 0);
+	full_meshlink_set_invitation_timeout(mesh1, 0);
 
 	assert(!meshlink_join(mesh3, quux_url));
 	free(quux_url);
 
 	// Check that existing nodes cannot join another mesh
 
-	char *corge_url = meshlink_invite(mesh3, NULL, "corge");
+	char *corge_url = full_meshlink_invite(mesh1, NULL, "corge");
 	assert(corge_url);
-
-	assert(meshlink_start(mesh3));
 
 	meshlink_stop(mesh2);
 
@@ -139,25 +141,25 @@ int main(void) {
 
 	// Check that invitations work correctly after changing ports
 
-	meshlink_set_invitation_timeout(mesh1, 86400);
-	meshlink_stop(mesh1);
+	full_meshlink_set_invitation_timeout(mesh1, 86400);
+	full_meshlink_stop(mesh1);
 	meshlink_stop(mesh3);
 
-	int oldport = meshlink_get_port(mesh1);
+	int oldport = full_meshlink_get_port(mesh1);
 	bool success = false;
 
 	for(int i = 0; !success && i < 100; i++) {
-		success = meshlink_set_port(mesh1, 0x9000 + rand() % 0x1000);
+		success = full_meshlink_set_port(mesh1, 0x9000 + rand() % 0x1000);
 	}
 
 	assert(success);
-	int newport = meshlink_get_port(mesh1);
+	int newport = full_meshlink_get_port(mesh1);
 	assert(oldport != newport);
 
-	assert(meshlink_set_canonical_address(mesh1, meshlink_get_self(mesh1), "localhost", NULL));
+	assert(full_meshlink_set_canonical_address(mesh1, meshlink_get_self(mesh1), "localhost", NULL));
 
-	assert(meshlink_start(mesh1));
-	quux_url = meshlink_invite(mesh1, NULL, "quux");
+	assert(full_meshlink_start(mesh1));
+	quux_url = full_meshlink_invite(mesh1, NULL, "quux");
 	assert(quux_url);
 
 	// The old port should not be in the invitation URL
@@ -178,8 +180,8 @@ int main(void) {
 
 	// Check that adding duplicate addresses get removed correctly
 
-	assert(meshlink_add_invitation_address(mesh1, "localhost", portstr + 1));
-	corge_url = meshlink_invite(mesh1, NULL, "corge");
+	assert(full_meshlink_add_invitation_address(mesh1, "localhost", portstr + 1));
+	corge_url = full_meshlink_invite(mesh1, NULL, "corge");
 	assert(corge_url);
 	char *localhost = strstr(corge_url, "localhost");
 	assert(localhost);
@@ -188,13 +190,13 @@ int main(void) {
 
 	// Check that resetting and adding multiple, different invitation address works
 
-	meshlink_clear_invitation_addresses(mesh1);
-	assert(meshlink_add_invitation_address(mesh1, "1.invalid.", "12345"));
-	assert(meshlink_add_invitation_address(mesh1, "2.invalid.", NULL));
-	assert(meshlink_add_invitation_address(mesh1, "3.invalid.", NULL));
-	assert(meshlink_add_invitation_address(mesh1, "4.invalid.", NULL));
-	assert(meshlink_add_invitation_address(mesh1, "5.invalid.", NULL));
-	char *grault_url = meshlink_invite(mesh1, NULL, "grault");
+	full_meshlink_clear_invitation_addresses(mesh1);
+	assert(full_meshlink_add_invitation_address(mesh1, "1.invalid.", "12345"));
+	assert(full_meshlink_add_invitation_address(mesh1, "2.invalid.", NULL));
+	assert(full_meshlink_add_invitation_address(mesh1, "3.invalid.", NULL));
+	assert(full_meshlink_add_invitation_address(mesh1, "4.invalid.", NULL));
+	assert(full_meshlink_add_invitation_address(mesh1, "5.invalid.", NULL));
+	char *grault_url = full_meshlink_invite(mesh1, NULL, "grault");
 	assert(grault_url);
 	localhost = strstr(grault_url, "localhost");
 	assert(localhost);
@@ -211,7 +213,7 @@ int main(void) {
 
 	// Check inviting nodes into a submesh
 
-	assert(!meshlink_get_node_submesh(mesh1, meshlink_get_self(mesh1)));
+	assert(!full_meshlink_get_node_submesh(mesh1, meshlink_get_self(mesh1)));
 
 	meshlink_handle_t *mesh4 = meshlink_open("invite_join_conf.4", "four", "invite-join", DEV_CLASS_BACKBONE);
 	meshlink_handle_t *mesh5 = meshlink_open("invite_join_conf.5", "five", "invite-join", DEV_CLASS_BACKBONE);
@@ -220,18 +222,14 @@ int main(void) {
 	assert(mesh5);
 	assert(mesh6);
 
-	meshlink_enable_discovery(mesh4, false);
-	meshlink_enable_discovery(mesh5, false);
-	meshlink_enable_discovery(mesh6, false);
-
-	meshlink_submesh_t *submesh1 = meshlink_submesh_open(mesh1, "submesh1");
-	meshlink_submesh_t *submesh2 = meshlink_submesh_open(mesh1, "submesh2");
+	meshlink_submesh_t *submesh1 = full_meshlink_submesh_open(mesh1, "submesh1");
+	meshlink_submesh_t *submesh2 = full_meshlink_submesh_open(mesh1, "submesh2");
 	assert(submesh1);
 	assert(submesh2);
 
-	char *four_url = meshlink_invite(mesh1, submesh1, mesh4->name);
-	char *five_url = meshlink_invite(mesh1, submesh1, mesh5->name);
-	char *six_url = meshlink_invite(mesh1, submesh2, mesh6->name);
+	char *four_url = full_meshlink_invite(mesh1, submesh1, mesh4->name);
+	char *five_url = full_meshlink_invite(mesh1, submesh1, mesh5->name);
+	char *six_url = full_meshlink_invite(mesh1, submesh2, mesh6->name);
 	assert(four_url);
 	assert(five_url);
 	assert(six_url);
@@ -249,88 +247,51 @@ int main(void) {
 	assert(meshlink_start(mesh5));
 	assert(meshlink_start(mesh6));
 
-	// Check that each node knows in which submesh it is
-
-	meshlink_submesh_t *mesh4_submesh = meshlink_get_node_submesh(mesh4, meshlink_get_self(mesh4));
-	meshlink_submesh_t *mesh5_submesh = meshlink_get_node_submesh(mesh4, meshlink_get_self(mesh5));
-	meshlink_submesh_t *mesh6_submesh = meshlink_get_node_submesh(mesh6, meshlink_get_self(mesh6));
-	assert(mesh4_submesh);
-	assert(mesh5_submesh);
-	assert(mesh6_submesh);
-	assert(!strcmp(mesh4_submesh->name, "submesh1"));
-	assert(!strcmp(mesh5_submesh->name, "submesh1"));
-	assert(!strcmp(mesh6_submesh->name, "submesh2"));
-
 	// Wait for nodes to connect, and check that foo sees the right submeshes
 
 	sleep(2);
-	meshlink_node_t *mesh1_four = meshlink_get_node(mesh1, mesh4->name);
-	meshlink_node_t *mesh1_six = meshlink_get_node(mesh1, mesh6->name);
-	assert(meshlink_get_node_submesh(mesh1, meshlink_get_self(mesh1)) == NULL);
-	assert(meshlink_get_node_submesh(mesh1, mesh1_four) == submesh1);
-	assert(meshlink_get_node_submesh(mesh1, mesh1_six) == submesh2);
+	meshlink_node_t *mesh1_four = full_meshlink_get_node(mesh1, mesh4->name);
+	meshlink_node_t *mesh1_six = full_meshlink_get_node(mesh1, mesh6->name);
+	assert(full_meshlink_get_node_submesh(mesh1, meshlink_get_self(mesh1)) == NULL);
+	assert(full_meshlink_get_node_submesh(mesh1, mesh1_four) == submesh1);
+	assert(full_meshlink_get_node_submesh(mesh1, mesh1_six) == submesh2);
 
-	// Check that the new invitees still have the right submesh information
+	// Check that none of the tiny nodes can see each other, regardless of which submesh they are in
 
-	meshlink_node_t *mesh4_four = meshlink_get_node(mesh4, mesh4->name);
-	meshlink_node_t *mesh4_five = meshlink_get_node(mesh4, mesh5->name);
-	meshlink_node_t *mesh6_six = meshlink_get_node(mesh6, mesh6->name);
-	assert(meshlink_get_node_submesh(mesh4, mesh4_four) == mesh4_submesh);
-	assert(meshlink_get_node_submesh(mesh4, mesh4_five) == mesh4_submesh);
-	assert(meshlink_get_node_submesh(mesh6, mesh6_six) == mesh6_submesh);
+	assert(!meshlink_get_node(mesh2, mesh4->name));
+	assert(!meshlink_get_node(mesh2, mesh5->name));
+	assert(!meshlink_get_node(mesh2, mesh6->name));
+	assert(!meshlink_get_node(mesh4, mesh2->name));
+	assert(!meshlink_get_node(mesh5, mesh2->name));
+	assert(!meshlink_get_node(mesh6, mesh2->name));
 
-	// Check that bar can see all the nodes in submeshes and vice versa
+	assert(!meshlink_get_node(mesh4, mesh5->name));
+	assert(!meshlink_get_node(mesh5, mesh4->name));
 
-	assert(meshlink_get_node(mesh2, mesh4->name));
-	assert(meshlink_get_node(mesh2, mesh5->name));
-	assert(meshlink_get_node(mesh2, mesh6->name));
-	assert(meshlink_get_node(mesh4, mesh2->name));
-	assert(meshlink_get_node(mesh5, mesh2->name));
-	assert(meshlink_get_node(mesh6, mesh2->name));
-
-	// Check that four and five can see each other
-
-	assert(meshlink_get_node(mesh4, mesh5->name));
-	assert(meshlink_get_node(mesh5, mesh4->name));
-
-	// Check that the nodes in different submeshes cannot see each other
 
 	assert(!meshlink_get_node(mesh4, mesh6->name));
 	assert(!meshlink_get_node(mesh5, mesh6->name));
 	assert(!meshlink_get_node(mesh6, mesh4->name));
 	assert(!meshlink_get_node(mesh6, mesh5->name));
 
-	// Check that bar sees the right submesh information for the nodes in submeshes
-
-	meshlink_submesh_t *mesh2_four_submesh = meshlink_get_node_submesh(mesh2, meshlink_get_node(mesh2, mesh4->name));
-	meshlink_submesh_t *mesh2_five_submesh = meshlink_get_node_submesh(mesh2, meshlink_get_node(mesh2, mesh5->name));
-	meshlink_submesh_t *mesh2_six_submesh = meshlink_get_node_submesh(mesh2, meshlink_get_node(mesh2, mesh6->name));
-	assert(mesh2_four_submesh);
-	assert(mesh2_five_submesh);
-	assert(mesh2_six_submesh);
-	assert(!strcmp(mesh2_four_submesh->name, "submesh1"));
-	assert(!strcmp(mesh2_five_submesh->name, "submesh1"));
-	assert(!strcmp(mesh2_six_submesh->name, "submesh2"));
-
 	// Test case #2: check invalid parameters
 
 	meshlink_handle_t *mesh7 = meshlink_open("invite_join_conf.7", "seven", "invite-join", DEV_CLASS_BACKBONE);
 	assert(mesh7);
-	meshlink_enable_discovery(mesh7, false);
-	char *seven_url = meshlink_invite(mesh1, NULL, "seven");
+	char *seven_url = full_meshlink_invite(mesh1, NULL, "seven");
 	assert(seven_url);
 
 	meshlink_errno = MESHLINK_OK;
-	assert(!meshlink_invite(NULL, NULL, "seven"));
-	assert(meshlink_errno == MESHLINK_EINVAL);
+	assert(!full_meshlink_invite(NULL, NULL, "seven"));
+	assert(*full_meshlink_errno == MESHLINK_EINVAL);
 
 	meshlink_errno = MESHLINK_OK;
-	assert(!meshlink_invite(mesh1, NULL, NULL));
-	assert(meshlink_errno == MESHLINK_EINVAL);
+	assert(!full_meshlink_invite(mesh1, NULL, NULL));
+	assert(*full_meshlink_errno == MESHLINK_EINVAL);
 
 	meshlink_errno = MESHLINK_OK;
-	assert(!meshlink_invite(mesh1, NULL, ""));
-	assert(meshlink_errno == MESHLINK_EINVAL);
+	assert(!full_meshlink_invite(mesh1, NULL, ""));
+	assert(*full_meshlink_errno == MESHLINK_EINVAL);
 
 	meshlink_errno = MESHLINK_OK;
 	assert(!meshlink_join(NULL, seven_url));
@@ -348,21 +309,20 @@ int main(void) {
 
 	assert(meshlink_join(mesh7, seven_url));
 	free(seven_url);
-	meshlink_close(mesh1);
+	full_meshlink_close(mesh1);
 	meshlink_stop(mesh2);
 	meshlink_stop(mesh3);
 	meshlink_stop(mesh4);
 	meshlink_stop(mesh5);
 	meshlink_stop(mesh6);
 	meshlink_close(mesh7);
-	mesh1 = meshlink_open("invite_join_conf.1", "foo", "invite-join", DEV_CLASS_BACKBONE);
+	mesh1 = full_meshlink_open("invite_join_conf.1", "foo", "invite-join", DEV_CLASS_BACKBONE);
 	mesh7 = meshlink_open("invite_join_conf.7", "seven", "invite-join", DEV_CLASS_BACKBONE);
 	assert(mesh1);
 	assert(mesh7);
-	meshlink_enable_discovery(mesh1, false);
-	meshlink_enable_discovery(mesh7, false);
-	meshlink_set_node_status_cb(mesh1, status_cb);
-	assert(meshlink_start(mesh1));
+	full_meshlink_enable_discovery(mesh1, false);
+	full_meshlink_set_node_status_cb(mesh1, status_cb);
+	assert(full_meshlink_start(mesh1));
 	assert(meshlink_start(mesh7));
 	assert(wait_sync_flag(&seven_reachable, 5));
 	meshlink_stop(mesh7);
@@ -371,24 +331,23 @@ int main(void) {
 
 	meshlink_handle_t *mesh8 = meshlink_open("invite_join_conf.8", "eight", "invite-join", DEV_CLASS_BACKBONE);
 	assert(mesh8);
-	meshlink_enable_discovery(mesh8, false);
-	char *eight_url = meshlink_invite(mesh1, NULL, "eight");
+	char *eight_url = full_meshlink_invite(mesh1, NULL, "eight");
 	assert(eight_url);
-	meshlink_set_inviter_commits_first(mesh1, true);
+	full_meshlink_set_inviter_commits_first(mesh1, true);
 	meshlink_set_inviter_commits_first(mesh8, false);
 	assert(!meshlink_join(mesh8, eight_url));
 	free(eight_url);
 
-	eight_url = meshlink_invite(mesh1, NULL, "eight");
-	meshlink_set_inviter_commits_first(mesh1, false);
+	eight_url = full_meshlink_invite(mesh1, NULL, "eight");
+	full_meshlink_set_inviter_commits_first(mesh1, false);
 	meshlink_set_inviter_commits_first(mesh8, true);
 	assert(!meshlink_join(mesh8, eight_url));
 	free(eight_url);
 
 	// Test case #5: test invitee committing first scenario
 
-	eight_url = meshlink_invite(mesh1, NULL, "eight");
-	meshlink_set_inviter_commits_first(mesh1, false);
+	eight_url = full_meshlink_invite(mesh1, NULL, "eight");
+	full_meshlink_set_inviter_commits_first(mesh1, false);
 	meshlink_set_inviter_commits_first(mesh8, false);
 	devtool_set_inviter_commits_first = invitee_commits_first_cb;
 	assert(meshlink_join(mesh8, eight_url));
@@ -399,11 +358,10 @@ int main(void) {
 
 	meshlink_handle_t *mesh9 = meshlink_open("invite_join_conf.9", "nine", "invite-join", DEV_CLASS_BACKBONE);
 	assert(mesh9);
-	meshlink_enable_discovery(mesh9, false);
-	char *nine_url = meshlink_invite(mesh1, NULL, "nine");
-	meshlink_set_inviter_commits_first(mesh1, true);
+	char *nine_url = full_meshlink_invite(mesh1, NULL, "nine");
+	full_meshlink_set_inviter_commits_first(mesh1, true);
 	meshlink_set_inviter_commits_first(mesh9, true);
-	devtool_set_inviter_commits_first = inviter_commits_first_cb;
+	*full_devtool_set_inviter_commits_first = inviter_commits_first_cb;
 	reset_sync_flag(&commits_first_flag);
 	assert(meshlink_join(mesh9, nine_url));
 	free(nine_url);
@@ -419,5 +377,5 @@ int main(void) {
 	meshlink_close(mesh4);
 	meshlink_close(mesh3);
 	meshlink_close(mesh2);
-	meshlink_close(mesh1);
+	full_meshlink_close(mesh1);
 }

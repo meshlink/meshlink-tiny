@@ -26,12 +26,15 @@ extern void open_meshlink_pair_ephemeral(meshlink_handle_t **a, meshlink_handle_
 
 /// Start a pair of meshlink instances and wait for them to connect together.
 extern void start_meshlink_pair(meshlink_handle_t *a, meshlink_handle_t *b);
+extern void start_full_tiny_pair(meshlink_handle_t *a, meshlink_handle_t *b);
 
 /// Stop a pair of meshlink instances.
 extern void stop_meshlink_pair(meshlink_handle_t *a, meshlink_handle_t *b);
+extern void stop_full_tiny_pair(meshlink_handle_t *a, meshlink_handle_t *b);
 
 /// Stop and cleanup a pair of meshlink instances.
 extern void close_meshlink_pair(meshlink_handle_t *a, meshlink_handle_t *b);
+extern void close_full_tiny_pair(meshlink_handle_t *a, meshlink_handle_t *b);
 
 /// Link two meshlink instances.
 extern void link_meshlink_pair(meshlink_handle_t *a, meshlink_handle_t *b);

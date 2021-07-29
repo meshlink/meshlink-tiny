@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <time.h>
 
+#include "full.h"
 #include "utils.h"
 
 void init_sync_flag(struct sync_flag *s) {
@@ -148,13 +149,39 @@ void start_meshlink_pair(meshlink_handle_t *a, meshlink_handle_t *b) {
 	a->priv = NULL;
 }
 
+void start_full_tiny_pair(meshlink_handle_t *a, meshlink_handle_t *b) {
+	struct sync_flag pair_status = {.flag = false};
+	init_sync_flag(&pair_status);
+
+	a->priv = &pair_status;
+	full_meshlink_set_node_status_cb(a, pair_status_cb);
+
+	assert(full_meshlink_start(a));
+	assert(meshlink_start(b));
+
+	assert(wait_sync_flag(&pair_status, 5));
+
+	full_meshlink_set_node_status_cb(a, NULL);
+	a->priv = NULL;
+}
+
 void stop_meshlink_pair(meshlink_handle_t *a, meshlink_handle_t *b) {
 	meshlink_stop(a);
 	meshlink_stop(b);
 }
 
+void stop_full_tiny_pair(meshlink_handle_t *a, meshlink_handle_t *b) {
+	full_meshlink_stop(a);
+	meshlink_stop(b);
+}
+
 void close_meshlink_pair(meshlink_handle_t *a, meshlink_handle_t *b) {
 	meshlink_close(a);
+	meshlink_close(b);
+}
+
+void close_full_tiny_pair(meshlink_handle_t *a, meshlink_handle_t *b) {
+	full_meshlink_close(a);
 	meshlink_close(b);
 }
 

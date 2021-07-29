@@ -54,7 +54,6 @@ bool add_edge_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 	(void)c;
 	(void)request;
 
-	/* TODO: Check if this is an edge we would own. */
 	return true;
 }
 
@@ -66,6 +65,5 @@ bool del_edge_h(meshlink_handle_t *mesh, connection_t *c, const char *request) {
 	(void)c;
 	(void)request;
 
-	/* TODO: Check if this is an edge we would own. */
 	return true;
 }

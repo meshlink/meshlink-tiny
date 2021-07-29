@@ -12,6 +12,7 @@
 /import-export
 /invite-join
 /sign-verify
+/storage-policy
 /trio
 /*.[0123456789]
 /channels_aio_fd.in
