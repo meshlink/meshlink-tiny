@@ -26,7 +26,6 @@ meshlink_get_all_nodes_by_last_reachable
 meshlink_get_fingerprint
 meshlink_get_node
 meshlink_get_node_dev_class
-meshlink_get_node_reachability
 meshlink_get_self
 meshlink_hint_address
 meshlink_hint_network_change
