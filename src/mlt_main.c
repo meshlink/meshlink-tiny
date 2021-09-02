@@ -159,6 +159,10 @@ static int join_func(int argc, char **argv) {
 		return 1;
 	}
 
+	uint32_t heap_size = heap_caps_get_minimum_free_size(MALLOC_CAP_32BIT);
+	uint32_t stack_size = uxTaskGetStackHighWaterMark(NULL);
+	ESP_LOGI(TAG, "min heap size: %u  stack size: %u", heap_size, stack_size);
+
 	return 0;
 }
 
@@ -186,10 +190,17 @@ static int quit_func(int argc, char **argv) {
 	meshlink_close(mesh);
 	mesh = NULL;
 	ESP_LOGI(TAG, "Closed mesh");
+	uint32_t heap_size = heap_caps_get_minimum_free_size(MALLOC_CAP_32BIT);
+	uint32_t stack_size = uxTaskGetStackHighWaterMark(NULL);
+	ESP_LOGI(TAG, "min heap size: %u  stack size: %u", heap_size, stack_size);
 	return 0;
 }
 
 static void mlt_main(void) {
+	uint32_t heap_size = heap_caps_get_minimum_free_size(MALLOC_CAP_32BIT);
+	uint32_t stack_size = uxTaskGetStackHighWaterMark(NULL);
+	ESP_LOGI(TAG, "min heap size: %u  stack size: %u", heap_size, stack_size);
+
 	meshlink_set_log_cb(NULL, MESHLINK_DEBUG, mlt_log);
 
 	ESP_LOGI(TAG, "Starting MeshLink-tiny instance...");
@@ -291,6 +302,10 @@ static void initialize_console() {
 
 
 void app_main(void) {
+	uint32_t heap_size = heap_caps_get_minimum_free_size(MALLOC_CAP_32BIT);
+	uint32_t stack_size = uxTaskGetStackHighWaterMark(NULL);
+	printf("min heap size: %u  stack size: %u\n", heap_size, stack_size);
+
 	/* Print chip information */
 	esp_chip_info_t chip_info;
 	esp_chip_info(&chip_info);
