@@ -316,11 +316,13 @@ static bool copytree(const char *src_dir_name, const void *src_key, const char *
 
 			config_free(&config);
 
-			struct utimbuf times;
-			times.modtime = st.st_mtime;
-			times.actime = st.st_atime;
+			const struct timeval times[2] = {{
+					st.st_mtime,
+					st.st_atime,
+				}
+			};
 
-			if(utime(dst_filename, &times)) {
+			if(utimes(dst_filename, times)) {
 				logger(NULL, MESHLINK_ERROR, "Failed to utime `%s': %s", dst_filename, strerror(errno));
 				meshlink_errno = MESHLINK_ESTORAGE;
 				return false;

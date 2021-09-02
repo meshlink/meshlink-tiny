@@ -20,6 +20,9 @@
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 */
 
+typedef void *List_t;
+typedef void *ListItem_t;
+
 #ifdef HAVE_MINGW
 #ifdef WITH_WINDOWS2000
 #define WINVER Windows2000
