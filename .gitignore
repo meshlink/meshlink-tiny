@@ -19,7 +19,7 @@ tags
 /aclocal.m4
 /aminclude.am
 /ar-lib
-/build
+/build*
 /compile
 /configure
 /depcomp

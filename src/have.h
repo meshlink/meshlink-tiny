@@ -29,6 +29,13 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
+#ifdef ESP_PLATFORM
+#include <freertos/FreeRTOS.h>
+#ifdef CONFIG_IDF_TARGET_ESP8266
+#include <freertos/private/list.h>
+#endif
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>

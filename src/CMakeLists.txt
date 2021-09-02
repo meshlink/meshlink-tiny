@@ -1,4 +1,4 @@
-idf_component_register(SRCS 
+idf_component_register(SRCS
 		"buffer.c"
 		"conf.c"
 		"connection.c"
