@@ -4,6 +4,7 @@ TESTS = \
 	ephemeral \
 	import-export \
 	invite-join \
+	metering \
 	sign-verify \
 	storage-policy
 
@@ -18,6 +19,7 @@ check_PROGRAMS = \
 	ephemeral \
 	import-export \
 	invite-join \
+	metering \
 	sign-verify \
 	storage-policy
 
@@ -37,5 +39,6 @@ ephemeral_SOURCES = ephemeral.c $(default_SOURCES)
 get_all_nodes_SOURCES = get-all-nodes.c $(default_SOURCES)
 import_export_SOURCES = import-export.c $(default_SOURCES)
 invite_join_SOURCES = invite-join.c $(default_SOURCES)
+metering_SOURCES = metering.c netns_utils.c $(default_SOURCES)
 sign_verify_SOURCES = sign-verify.c $(default_SOURCES)
 storage_policy_SOURCES = storage-policy.c $(default_SOURCES)

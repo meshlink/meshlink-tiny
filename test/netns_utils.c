@@ -1,6 +1,6 @@
 #define _GNU_SOURCE 1
 
-#ifndef NDEBUG
+#ifdef NDEBUG
 #undef NDEBUG
 #endif
 
@@ -10,9 +10,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include "../src/meshlink-tiny.h"
+#include "meshlink-tiny.h"
 #include "netns_utils.h"
 #include "utils.h"
+
+#include "full.h"
 
 static int ip = 1;
 
@@ -24,6 +26,8 @@ static void create_peers(peer_config_t *peers, int npeers, const char *prefix) {
 	}
 
 	for(int i = 0; i < npeers; i++) {
+		bool full = peers[i].full;
+
 		assert(asprintf(&peers[i].netns_name, "%s%d", prefix, i) > 0);
 		char *command = NULL;
 		assert(asprintf(&command,
@@ -45,16 +49,25 @@ static void create_peers(peer_config_t *peers, int npeers, const char *prefix) {
 		char *conf_path = NULL;
 		assert(asprintf(&conf_path, "%s_conf.%d", prefix, i + 1) > 0);
 		assert(conf_path);
-		assert(meshlink_destroy(conf_path));
+		assert(full ? full_meshlink_destroy(conf_path) : meshlink_destroy(conf_path));
 
-		meshlink_open_params_t *params = meshlink_open_params_init(conf_path, peers[i].name, prefix, peers[i].devclass);
+		meshlink_open_params_t *params = full
+		                                 ? full_meshlink_open_params_init(conf_path, peers[i].name, prefix, peers[i].devclass)
+		                                 : meshlink_open_params_init(conf_path, peers[i].name, prefix, peers[i].devclass);
 		assert(params);
-		assert(meshlink_open_params_set_netns(params, peers[i].netns));
+		assert(full
+		       ? full_meshlink_open_params_set_netns(params, peers[i].netns)
+		       : meshlink_open_params_set_netns(params, peers[i].netns)
+		      );
 
-		peers[i].mesh = meshlink_open_ex(params);
+		peers[i].mesh = full ? full_meshlink_open_ex(params) : meshlink_open_ex(params);
 		assert(peers[i].mesh);
 		free(params);
 		free(conf_path);
+
+		if(full) {
+			full_meshlink_enable_discovery(peers[i].mesh, false);
+		}
 	}
 }
 
@@ -90,6 +103,26 @@ static void setup_lan_topology(peer_config_t *peers, int npeers) {
 	}
 }
 
+/// Set up an indirect topology where all peers can only access the relay
+static void setup_indirect_topology(peer_config_t *peers, int npeers) {
+	// Add an interface to each peer that is connected to the relay
+	for(int i = 1; i < npeers; i++) {
+		char *command = NULL;
+		assert(asprintf(&command,
+		                "/bin/ip netns exec %1$s /bin/ip link add eth0 type veth peer eth%3$d netns %2$s;"
+		                "/bin/ip netns exec %1$s ip addr flush dev eth0;"
+		                "/bin/ip netns exec %1$s ip addr add 192.168.%3$d.2/24 dev eth0;"
+		                "/bin/ip netns exec %1$s /bin/ip link set dev eth0 up;"
+		                "/bin/ip netns exec %2$s ip addr flush dev eth%3$d;"
+		                "/bin/ip netns exec %2$s ip addr add 192.168.%3$d.1/24 dev eth%3$d;"
+		                "/bin/ip netns exec %2$s /bin/ip link set dev eth%3$d up;",
+		                peers[i].netns_name, peers[0].netns_name, i));
+		assert(command);
+		assert(system(command) == 0);
+		free(command);
+	}
+}
+
 /// Give a peer a unique IP address
 void change_peer_ip(peer_config_t *peer) {
 	char *command = NULL;
@@ -104,23 +137,25 @@ void change_peer_ip(peer_config_t *peer) {
 }
 
 /// Let the first peer in a list invite all the subsequent peers
-static void link_peers(peer_config_t *peers, int npeers) {
+static void invite_peers(peer_config_t *peers, int npeers) {
+	assert(peers[0].full);
+	assert(full_meshlink_start(peers[0].mesh));
+
 	for(int i = 1; i < npeers; i++) {
-		char *export_relay = meshlink_export(peers[0].mesh);
-		char *export_peer = meshlink_export(peers[i].mesh);
-		assert(export_relay);
-		assert(export_peer);
-		assert(meshlink_import(peers[0].mesh, export_peer));
-		assert(meshlink_import(peers[i].mesh, export_relay));
-		free(export_relay);
-		free(export_peer);
+		char *invitation = full_meshlink_invite_ex(peers[0].mesh, NULL, peers[i].name, MESHLINK_INVITE_LOCAL | MESHLINK_INVITE_NUMERIC);
+		assert(invitation);
+		printf("%s\n", invitation);
+		assert(peers[i].full ? full_meshlink_join(peers[i].mesh, invitation) : meshlink_join(peers[i].mesh, invitation));
+		free(invitation);
 	}
+
+	full_meshlink_stop(peers[0].mesh);
 }
 
 /// Close meshlink instances and clean up
 static void close_peers(peer_config_t *peers, int npeers) {
 	for(int i = 0; i < npeers; i++) {
-		meshlink_close(peers[i].mesh);
+		peers[i].full ? full_meshlink_close(peers[i].mesh) : meshlink_close(peers[i].mesh);
 		close(peers[i].netns);
 		free(peers[i].netns_name);
 	}
@@ -129,16 +164,47 @@ static void close_peers(peer_config_t *peers, int npeers) {
 /// Set up relay, peer and NUT that are directly connected
 peer_config_t *setup_relay_peer_nut(const char *prefix) {
 	static peer_config_t peers[] = {
-		{"relay", DEV_CLASS_BACKBONE},
-		{"peer", DEV_CLASS_STATIONARY},
-		{"nut", DEV_CLASS_STATIONARY},
+		{"relay", DEV_CLASS_BACKBONE, NULL, 0, true, NULL},
+		{"peer", DEV_CLASS_STATIONARY, NULL, 0, false, NULL},
+		{"nut", DEV_CLASS_STATIONARY, NULL, 0, false, NULL},
 	};
 
 	create_peers(peers, 3, prefix);
 	setup_lan_topology(peers, 3);
-	link_peers(peers, 3);
+	invite_peers(peers, 3);
 
 	return peers;
+}
+
+/// Set up relay, peer and NUT that are directly connected
+peer_config_t *setup_relay_peer_nut_indirect(const char *prefix) {
+	static peer_config_t peers[] = {
+		{"relay", DEV_CLASS_BACKBONE, NULL, 0, true, NULL},
+		{"peer", DEV_CLASS_STATIONARY, NULL, 0, false, NULL},
+		{"nut", DEV_CLASS_STATIONARY, NULL, 0, false, NULL},
+	};
+
+	create_peers(peers, 3, prefix);
+	setup_indirect_topology(peers, 3);
+	assert(full_meshlink_add_invitation_address(peers[0].mesh, "192.168.1.1", NULL));
+	assert(full_meshlink_add_invitation_address(peers[0].mesh, "192.168.2.1", NULL));
+	invite_peers(peers, 3);
+
+	return peers;
+}
+
+/// Make all nodes only be able to communicate via TCP
+void set_peers_tcponly(peer_config_t *peers, int npeers) {
+	for(int i = 0; i < npeers; i++) {
+		char *command = NULL;
+		assert(asprintf(&command,
+		                "/bin/ip netns exec %1$s iptables -A INPUT -p udp -j DROP;"
+		                "/bin/ip netns exec %1$s iptables -A OUTPUT -p udp -j DROP;",
+		                peers[i].netns_name));
+		assert(command);
+		assert(system(command) == 0);
+		free(command);
+	}
 }
 
 void close_relay_peer_nut(peer_config_t *peers) {

@@ -7,11 +7,14 @@ typedef struct peer_config {
 
 	char *netns_name;
 	int netns;
+	bool full;
 	meshlink_handle_t *mesh;
 } peer_config_t;
 
 extern void change_peer_ip(peer_config_t *peer);
 extern peer_config_t *setup_relay_peer_nut(const char *prefix);
+extern peer_config_t *setup_relay_peer_nut_indirect(const char *prefix);
+extern void set_peers_tcponly(peer_config_t *peers, int npeers);
 extern void close_relay_peer_nut(peer_config_t *peers);
 
 #endif
