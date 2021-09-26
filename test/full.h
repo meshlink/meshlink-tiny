@@ -16,6 +16,31 @@ struct meshlink_submesh {
 	void *priv;             ///< Private pointer which may be set freely by the application, and is never used or modified by MeshLink.
 };
 
+/// The status of a node.
+struct devtool_node_status {
+	uint32_t status;
+	struct sockaddr_storage address;
+	uint16_t mtu;
+	uint16_t minmtu;
+	uint16_t maxmtu;
+	int mtuprobes;
+
+	enum {
+		DEVTOOL_UDP_FAILED = -2,     /// UDP tried but failed
+		DEVTOOL_UDP_IMPOSSIBLE = -1, /// UDP not possible (node unreachable)
+		DEVTOOL_UDP_UNKNOWN = 0,     /// UDP status not known (never tried to communicate with the node)
+		DEVTOOL_UDP_TRYING,          /// UDP detection in progress
+		DEVTOOL_UDP_WORKING,         /// UDP communication established
+	} udp_status;
+
+	uint64_t in_data;                    /// Bytes received from channels
+	uint64_t out_data;                   /// Bytes sent via channels
+	uint64_t in_forward;                 /// Bytes received for channels that need to be forwarded to other nodes
+	uint64_t out_forward;                /// Bytes forwarded from channel from other nodes
+	uint64_t in_meta;                    /// Bytes received from meta-connections, heartbeat packets etc.
+	uint64_t out_meta;                   /// Bytes sent on meta-connections, heartbeat packets etc.
+};
+
 typedef void (*meshlink_node_pmtu_cb_t)(struct meshlink_handle *mesh, struct meshlink_node *node, uint16_t pmtu);
 typedef void (*meshlink_blacklisted_cb_t)(struct meshlink_handle *mesh, struct meshlink_node *node);
 typedef bool (*meshlink_channel_listen_cb_t)(struct meshlink_handle *mesh, struct meshlink_node *node, uint16_t port);
@@ -129,6 +154,7 @@ extern void (*full_meshlink_set_storage_policy)(struct meshlink_handle *mesh, me
 
 typedef void (*full_devtool_set_inviter_commits_first_t)(bool inviter_commited_first);
 extern full_devtool_set_inviter_commits_first_t *full_devtool_set_inviter_commits_first;
+extern void (*full_devtool_reset_node_counters)(struct meshlink_handle *mesh, meshlink_node_t *node, struct devtool_node_status *);
 
 void init_full(void);
 #endif
