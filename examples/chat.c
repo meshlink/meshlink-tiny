@@ -1,7 +1,13 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <assert.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <dirent.h>
 #include "../src/meshlink-tiny.h"
 
 static void log_message(meshlink_handle_t *mesh, meshlink_log_level_t level, const char *text) {
@@ -150,6 +156,55 @@ static void parse_input(meshlink_handle_t *mesh, char *buf) {
 	printf("Message sent to '%s'.\n", destination->name);
 }
 
+static char *flatten(const char *filename) {
+	char *result = strdup(filename);
+	assert(result);
+
+	for(char *c = result; *c; c++) {
+		if(*c == '/') {
+			*c = ':';
+		}
+	}
+
+	return result;
+}
+
+static bool load_cb(meshlink_handle_t *mesh, const char *key, void *data, size_t *len) {
+	fprintf(stderr, "load_cb(%s, %s, %p, %zu)\n", mesh->name, key, data, *len);
+	FILE *f = fopen(flatten(key), "r");
+	assert(f);
+	fread(data, 1, *len, f);
+	fseek(f, 0, SEEK_END);
+	*len = ftell(f);
+	assert(!fclose(f));
+	return true;
+}
+
+static bool store_cb(meshlink_handle_t *mesh, const char *key, const void *data, size_t len) {
+	fprintf(stderr, "store_cb(%s, %s, %p, %zu)\n", mesh->name, key, data, len);
+	FILE *f = fopen(flatten(key), "w");
+	assert(f);
+	assert(fwrite(data, len, 1, f) == 1);
+	assert(!fclose(f));
+	return true;
+}
+
+static bool ls_cb(meshlink_handle_t *mesh, meshlink_ls_entry_cb_t entry_cb) {
+	fprintf(stderr, "ls_cb()");
+	DIR *dir = opendir(".");
+	struct dirent *ent;
+
+	while((ent = readdir(dir))) {
+		if(ent->d_name[0] != '.') {
+			entry_cb(mesh, ent->d_name, 0);
+		}
+	}
+
+	closedir(dir);
+
+	return true;
+}
+
 int main(int argc, char *argv[]) {
 	const char *confbase = ".chat";
 	const char *nick = NULL;
@@ -163,9 +218,15 @@ int main(int argc, char *argv[]) {
 		nick = argv[2];
 	}
 
-	meshlink_set_log_cb(NULL, MESHLINK_INFO, log_message);
+	assert(mkdir(confbase, 0700) == 0);
+	assert(chdir(confbase) == 0);
 
-	meshlink_handle_t *mesh = meshlink_open(confbase, nick, "chat", DEV_CLASS_STATIONARY);
+	meshlink_set_log_cb(NULL, MESHLINK_DEBUG, log_message);
+	meshlink_open_params_t *params = meshlink_open_params_init(confbase, nick, "chat", DEV_CLASS_STATIONARY);
+	//assert(meshlink_open_params_set_storage_key(params, "12345", 5));
+	assert(meshlink_open_params_set_storage_callbacks(params, load_cb, store_cb, ls_cb));
+	meshlink_handle_t *mesh = meshlink_open_ex(params);
+	meshlink_open_params_free(params);
 
 	if(!mesh) {
 		fprintf(stderr, "Could not open MeshLink: %s\n", meshlink_strerror(meshlink_errno));

@@ -18,6 +18,7 @@
 */
 
 #include "system.h"
+
 #include <assert.h>
 #include <sys/types.h>
 #include <utime.h>
@@ -26,63 +27,11 @@
 #include "crypto.h"
 #include "logger.h"
 #include "meshlink_internal.h"
-#include "xalloc.h"
 #include "packmsg.h"
+#include "protocol.h"
+#include "xalloc.h"
 
-/// Generate a path to the main configuration file.
-static void make_main_path(meshlink_handle_t *mesh, const char *conf_subdir, char *path, size_t len) {
-	assert(conf_subdir);
-	assert(path);
-	assert(len);
-
-	snprintf(path, len, "%s" SLASH "%s" SLASH "meshlink.conf", mesh->confbase, conf_subdir);
-}
-
-/// Generate a path to a host configuration file.
-static void make_host_path(meshlink_handle_t *mesh, const char *conf_subdir, const char *name, char *path, size_t len) {
-	assert(conf_subdir);
-	assert(name);
-	assert(path);
-	assert(len);
-
-	snprintf(path, len, "%s" SLASH "%s" SLASH "hosts" SLASH "%s", mesh->confbase, conf_subdir, name);
-}
-
-/// Remove a directory recursively
-static bool deltree(const char *dirname) {
-	assert(dirname);
-
-	DIR *d = opendir(dirname);
-
-	if(d) {
-		struct dirent *ent;
-
-		while((ent = readdir(d))) {
-			if(ent->d_name[0] == '.') {
-				if(!ent->d_name[1] || (ent->d_name[1] == '.' && !ent->d_name[2])) {
-					continue;
-				}
-			}
-
-			char filename[PATH_MAX];
-			snprintf(filename, sizeof(filename), "%s" SLASH "%s", dirname, ent->d_name);
-
-			if(unlink(filename)) {
-				if(!deltree(filename)) {
-					return false;
-				}
-			}
-		}
-
-		closedir(d);
-	} else {
-		return errno == ENOENT;
-	}
-
-	return rmdir(dirname) == 0;
-}
-
-bool sync_path(const char *pathname) {
+static bool sync_path(const char *pathname) {
 	assert(pathname);
 
 	int fd = open(pathname, O_RDONLY);
@@ -110,434 +59,265 @@ bool sync_path(const char *pathname) {
 	return true;
 }
 
-/// Try decrypting the main configuration file from the given sub-directory.
-static bool main_config_decrypt(meshlink_handle_t *mesh, const char *conf_subdir) {
-	assert(mesh->config_key);
-	assert(mesh->confbase);
-	assert(conf_subdir);
-
-	config_t config;
-
-	if(!main_config_read(mesh, conf_subdir, &config, mesh->config_key)) {
-		logger(mesh, MESHLINK_ERROR, "Could not read main configuration file");
-		return false;
-	}
-
-	packmsg_input_t in = {config.buf, config.len};
-
-	uint32_t version = packmsg_get_uint32(&in);
-	config_free(&config);
-
-	return version == MESHLINK_CONFIG_VERSION;
-}
-
-/// Create a fresh configuration directory
-bool config_init(meshlink_handle_t *mesh, const char *conf_subdir) {
-	assert(conf_subdir);
-
-	if(!mesh->confbase) {
-		return true;
-	}
-
-	char path[PATH_MAX];
-
-	// Create "current" sub-directory in the confbase
-	snprintf(path, sizeof(path), "%s" SLASH "%s", mesh->confbase, conf_subdir);
-
-	if(!deltree(path)) {
-		logger(mesh, MESHLINK_DEBUG, "Could not delete directory %s: %s\n", path, strerror(errno));
-		return false;
-	}
-
-	if(mkdir(path, 0700)) {
-		logger(mesh, MESHLINK_DEBUG, "Could not create directory %s: %s\n", path, strerror(errno));
-		return false;
-	}
-
-	make_host_path(mesh, conf_subdir, "", path, sizeof(path));
-
-	if(mkdir(path, 0700)) {
-		logger(mesh, MESHLINK_DEBUG, "Could not create directory %s: %s\n", path, strerror(errno));
-		return false;
-	}
-
-	return true;
+static bool invalidate_config_file(meshlink_handle_t *mesh, const char *name, size_t len) {
+	(void)len;
+	config_t empty_config = {NULL, 0};
+	return config_store(mesh, name, &empty_config);
 }
 
 /// Wipe an existing configuration directory
-bool config_destroy(const char *confbase, const char *conf_subdir) {
-	assert(conf_subdir);
-
-	if(!confbase) {
+bool config_destroy(const struct meshlink_open_params *params) {
+	if(!params->confbase) {
 		return true;
 	}
 
-	struct stat st;
+	FILE *lockfile = NULL;
 
-	char path[PATH_MAX];
-
-	// Check the presence of configuration base sub directory.
-	snprintf(path, sizeof(path), "%s" SLASH "%s", confbase, conf_subdir);
-
-	if(stat(path, &st)) {
-		if(errno == ENOENT) {
+	if(!params->load_cb) {
+		/* Exit early if the confbase directory itself doesn't exist */
+		if(access(params->confbase, F_OK) && errno == ENOENT) {
 			return true;
-		} else {
-			logger(NULL, MESHLINK_ERROR, "Cannot stat %s: %s\n", path, strerror(errno));
+		}
+
+		/* Take the lock the same way meshlink_open() would. */
+		lockfile = fopen(params->lock_filename, "w+");
+
+		if(!lockfile) {
+			logger(NULL, MESHLINK_ERROR, "Could not open lock file %s: %s", params->lock_filename, strerror(errno));
 			meshlink_errno = MESHLINK_ESTORAGE;
 			return false;
 		}
-	}
-
-	// Remove meshlink.conf
-	snprintf(path, sizeof(path), "%s" SLASH "%s" SLASH "meshlink.conf", confbase, conf_subdir);
-
-	if(unlink(path)) {
-		if(errno != ENOENT) {
-			logger(NULL, MESHLINK_ERROR, "Cannot delete %s: %s\n", path, strerror(errno));
-			meshlink_errno = MESHLINK_ESTORAGE;
-			return false;
-		}
-	}
-
-	snprintf(path, sizeof(path), "%s" SLASH "%s", confbase, conf_subdir);
-
-	if(!deltree(path)) {
-		logger(NULL, MESHLINK_ERROR, "Cannot delete %s: %s\n", path, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-	return sync_path(confbase);
-}
-
-static bool copytree(const char *src_dir_name, const void *src_key, const char *dst_dir_name, const void *dst_key) {
-	assert(src_dir_name);
-	assert(dst_dir_name);
-
-	char src_filename[PATH_MAX];
-	char dst_filename[PATH_MAX];
-	struct dirent *ent;
-
-	DIR *src_dir = opendir(src_dir_name);
-
-	if(!src_dir) {
-		logger(NULL, MESHLINK_ERROR, "Could not open directory file %s\n", src_dir_name);
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-	// Delete if already exists and create a new destination directory
-	if(!deltree(dst_dir_name)) {
-		logger(NULL, MESHLINK_ERROR, "Cannot delete %s: %s\n", dst_dir_name, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-	if(mkdir(dst_dir_name, 0700)) {
-		logger(NULL, MESHLINK_ERROR, "Could not create directory %s\n", dst_filename);
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-	while((ent = readdir(src_dir))) {
-		if(ent->d_name[0] == '.') {
-			continue;
-		}
-
-		snprintf(dst_filename, sizeof(dst_filename), "%s" SLASH "%s", dst_dir_name, ent->d_name);
-		snprintf(src_filename, sizeof(src_filename), "%s" SLASH "%s", src_dir_name, ent->d_name);
-
-		if(ent->d_type == DT_DIR) {
-			if(!copytree(src_filename, src_key, dst_filename, dst_key)) {
-				logger(NULL, MESHLINK_ERROR, "Copying %s to %s failed\n", src_filename, dst_filename);
-				meshlink_errno = MESHLINK_ESTORAGE;
-				return false;
-			}
-
-			if(!sync_path(dst_filename)) {
-				return false;
-			}
-		} else if(ent->d_type == DT_REG) {
-			struct stat st;
-			config_t config;
-
-			if(stat(src_filename, &st)) {
-				logger(NULL, MESHLINK_ERROR, "Could not stat file `%s': %s\n", src_filename, strerror(errno));
-				meshlink_errno = MESHLINK_ESTORAGE;
-				return false;
-			}
-
-			FILE *f = fopen(src_filename, "r");
-
-			if(!f) {
-				logger(NULL, MESHLINK_ERROR, "Failed to open `%s': %s\n", src_filename, strerror(errno));
-				meshlink_errno = MESHLINK_ESTORAGE;
-				return false;
-			}
-
-			if(!config_read_file(NULL, f, &config, src_key)) {
-				logger(NULL, MESHLINK_ERROR, "Failed to read `%s': %s\n", src_filename, strerror(errno));
-				fclose(f);
-				meshlink_errno = MESHLINK_ESTORAGE;
-				return false;
-			}
-
-			if(fclose(f)) {
-				logger(NULL, MESHLINK_ERROR, "Failed to close `%s': %s\n", src_filename, strerror(errno));
-				config_free(&config);
-				meshlink_errno = MESHLINK_ESTORAGE;
-				return false;
-			}
-
-			f = fopen(dst_filename, "w");
-
-			if(!f) {
-				logger(NULL, MESHLINK_ERROR, "Failed to open `%s': %s", dst_filename, strerror(errno));
-				config_free(&config);
-				meshlink_errno = MESHLINK_ESTORAGE;
-				return false;
-			}
-
-			if(!config_write_file(NULL, f, &config, dst_key)) {
-				logger(NULL, MESHLINK_ERROR, "Failed to write `%s': %s", dst_filename, strerror(errno));
-				config_free(&config);
-				fclose(f);
-				meshlink_errno = MESHLINK_ESTORAGE;
-				return false;
-			}
-
-			if(fclose(f)) {
-				logger(NULL, MESHLINK_ERROR, "Failed to close `%s': %s", dst_filename, strerror(errno));
-				config_free(&config);
-				meshlink_errno = MESHLINK_ESTORAGE;
-				return false;
-			}
-
-			config_free(&config);
-
-			struct utimbuf times;
-			times.modtime = st.st_mtime;
-			times.actime = st.st_atime;
-
-			if(utime(dst_filename, &times)) {
-				logger(NULL, MESHLINK_ERROR, "Failed to utime `%s': %s", dst_filename, strerror(errno));
-				meshlink_errno = MESHLINK_ESTORAGE;
-				return false;
-			}
-		}
-	}
-
-	closedir(src_dir);
-	return true;
-}
-
-bool config_copy(meshlink_handle_t *mesh, const char *src_dir_name, const void *src_key, const char *dst_dir_name, const void *dst_key) {
-	assert(src_dir_name);
-	assert(dst_dir_name);
-
-	char src_filename[PATH_MAX];
-	char dst_filename[PATH_MAX];
-
-	snprintf(dst_filename, sizeof(dst_filename), "%s" SLASH "%s", mesh->confbase, dst_dir_name);
-	snprintf(src_filename, sizeof(src_filename), "%s" SLASH "%s", mesh->confbase, src_dir_name);
-
-	return copytree(src_filename, src_key, dst_filename, dst_key);
-}
-
-/// Check the presence of the main configuration file.
-bool main_config_exists(meshlink_handle_t *mesh, const char *conf_subdir) {
-	assert(conf_subdir);
-
-	if(!mesh->confbase) {
-		return false;
-	}
-
-	char path[PATH_MAX];
-	make_main_path(mesh, conf_subdir, path, sizeof(path));
-	return access(path, F_OK) == 0;
-}
-
-bool config_rename(meshlink_handle_t *mesh, const char *old_conf_subdir, const char *new_conf_subdir) {
-	assert(old_conf_subdir);
-	assert(new_conf_subdir);
-
-	if(!mesh->confbase) {
-		return false;
-	}
-
-	char old_path[PATH_MAX];
-	char new_path[PATH_MAX];
-
-	snprintf(old_path, sizeof(old_path), "%s" SLASH "%s", mesh->confbase, old_conf_subdir);
-	snprintf(new_path, sizeof(new_path), "%s" SLASH "%s", mesh->confbase, new_conf_subdir);
-
-	return rename(old_path, new_path) == 0 && sync_path(mesh->confbase);
-}
-
-bool config_sync(meshlink_handle_t *mesh, const char *conf_subdir) {
-	assert(conf_subdir);
-
-	if(!mesh->confbase || mesh->storage_policy == MESHLINK_STORAGE_DISABLED) {
-		return true;
-	}
-
-	char path[PATH_MAX];
-	snprintf(path, sizeof(path), "%s" SLASH "%s" SLASH "hosts", mesh->confbase, conf_subdir);
-
-	if(!sync_path(path)) {
-		return false;
-	}
-
-	snprintf(path, sizeof(path), "%s" SLASH "%s", mesh->confbase, conf_subdir);
-
-	if(!sync_path(path)) {
-		return false;
-	}
-
-	return true;
-}
-
-bool meshlink_confbase_exists(meshlink_handle_t *mesh) {
-	if(!mesh->confbase) {
-		return false;
-	}
-
-	bool confbase_exists = false;
-	bool confbase_decryptable = false;
-
-	if(main_config_exists(mesh, "current")) {
-		confbase_exists = true;
-
-		if(mesh->config_key && main_config_decrypt(mesh, "current")) {
-			confbase_decryptable = true;
-		}
-	}
-
-	if(mesh->config_key && !confbase_decryptable && main_config_exists(mesh, "new")) {
-		confbase_exists = true;
-
-		if(main_config_decrypt(mesh, "new")) {
-			if(!config_destroy(mesh->confbase, "current")) {
-				return false;
-			}
-
-			if(!config_rename(mesh, "new", "current")) {
-				return false;
-			}
-
-			confbase_decryptable = true;
-		}
-	}
-
-	if(mesh->config_key && !confbase_decryptable && main_config_exists(mesh, "old")) {
-		confbase_exists = true;
-
-		if(main_config_decrypt(mesh, "old")) {
-			if(!config_destroy(mesh->confbase, "current")) {
-				return false;
-			}
-
-			if(!config_rename(mesh, "old", "current")) {
-				return false;
-			}
-
-			confbase_decryptable = true;
-		}
-	}
-
-	// Cleanup if current is existing with old and new
-	if(confbase_exists && confbase_decryptable) {
-		if(!config_destroy(mesh->confbase, "old") || !config_destroy(mesh->confbase, "new")) {
-			return false;
-		}
-	}
-
-	return confbase_exists;
-}
-
-/// Lock the main configuration file. Creates confbase if necessary.
-bool main_config_lock(meshlink_handle_t *mesh, const char *lock_filename) {
-	if(!mesh->confbase) {
-		return true;
-	}
-
-	assert(lock_filename);
-
-	if(mkdir(mesh->confbase, 0700) && errno != EEXIST) {
-		logger(NULL, MESHLINK_ERROR, "Cannot create configuration directory %s: %s", mesh->confbase, strerror(errno));
-		meshlink_close(mesh);
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return NULL;
-	}
-
-	mesh->lockfile = fopen(lock_filename, "w+");
-
-	if(!mesh->lockfile) {
-		logger(NULL, MESHLINK_ERROR, "Cannot not open %s: %s\n", lock_filename, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
 
 #ifdef FD_CLOEXEC
-	fcntl(fileno(mesh->lockfile), F_SETFD, FD_CLOEXEC);
+		fcntl(fileno(lockfile), F_SETFD, FD_CLOEXEC);
 #endif
 
-#ifdef HAVE_FLOCK
+#ifdef HAVE_MINGW
+		// TODO: use _locking()?
+#else
 
-	if(flock(fileno(mesh->lockfile), LOCK_EX | LOCK_NB) != 0) {
-		logger(NULL, MESHLINK_ERROR, "Cannot lock %s: %s\n", lock_filename, strerror(errno));
-		fclose(mesh->lockfile);
-		mesh->lockfile = NULL;
-		meshlink_errno = MESHLINK_EBUSY;
-		return false;
+		if(flock(fileno(lockfile), LOCK_EX | LOCK_NB) != 0) {
+			logger(NULL, MESHLINK_ERROR, "Configuration directory %s still in use\n", params->lock_filename);
+			fclose(lockfile);
+			meshlink_errno = MESHLINK_EBUSY;
+			return false;
+		}
+
+#endif
 	}
 
-#endif
+	{
+		meshlink_handle_t tmp_mesh;
+		memset(&tmp_mesh, 0, sizeof tmp_mesh);
+
+		tmp_mesh.confbase = params->confbase;
+		tmp_mesh.name = params->name;
+		tmp_mesh.load_cb = params->load_cb;
+		tmp_mesh.store_cb = params->store_cb;
+		tmp_mesh.ls_cb = params->ls_cb;
+
+		if(!config_ls(&tmp_mesh, invalidate_config_file)) {
+			logger(NULL, MESHLINK_ERROR, "Cannot remove configuration files\n");
+			fclose(lockfile);
+			meshlink_errno = MESHLINK_ESTORAGE;
+			return false;
+		}
+	}
+
+	if(!params->load_cb) {
+		if(unlink(params->lock_filename) && errno != ENOENT) {
+			logger(NULL, MESHLINK_ERROR, "Cannot remove lock file %s: %s\n", params->lock_filename, strerror(errno));
+			fclose(lockfile);
+			meshlink_errno = MESHLINK_ESTORAGE;
+			return false;
+		}
+
+		fclose(lockfile);
+
+		if(!sync_path(params->confbase)) {
+			logger(NULL, MESHLINK_ERROR, "Cannot sync directory %s: %s\n", params->confbase, strerror(errno));
+			meshlink_errno = MESHLINK_ESTORAGE;
+			return false;
+		}
+
+		rmdir(params->confbase);
+	}
 
 	return true;
 }
 
-/// Unlock the main configuration file.
-void main_config_unlock(meshlink_handle_t *mesh) {
-	if(mesh->lockfile) {
-		fclose(mesh->lockfile);
-		mesh->lockfile = NULL;
+/// Read a blob of data.
+static bool load(meshlink_handle_t *mesh, const char *key, void *data, size_t *len) {
+	logger(mesh, MESHLINK_DEBUG, "load(%s, %p, %zu)", key ? key : "(null)", data, *len);
+
+	if(mesh->load_cb) {
+		if(!mesh->load_cb(mesh, key, data, len)) {
+			logger(mesh, MESHLINK_ERROR, "Failed to open `%s'\n", key);
+			meshlink_errno = MESHLINK_ESTORAGE;
+			return false;
+		} else {
+			return true;
+		}
 	}
-}
 
-/// Read a configuration file from a FILE handle.
-bool config_read_file(meshlink_handle_t *mesh, FILE *f, config_t *config, const void *key) {
-	assert(f);
+	char filename[PATH_MAX];
+	snprintf(filename, sizeof(filename), "%s/%s", mesh->confbase, key);
 
-	long len;
+	FILE *f = fopen(filename, "r");
 
-	if(fseek(f, 0, SEEK_END) || !(len = ftell(f)) || fseek(f, 0, SEEK_SET)) {
+	if(!f) {
+		logger(mesh, MESHLINK_ERROR, "Failed to open `%s': %s\n", filename, strerror(errno));
+		meshlink_errno = MESHLINK_ESTORAGE;
+		return false;
+	}
+
+	long actual_len;
+
+	if(fseek(f, 0, SEEK_END) || (actual_len = ftell(f)) <= 0 || fseek(f, 0, SEEK_SET)) {
 		logger(mesh, MESHLINK_ERROR, "Cannot get config file size: %s\n", strerror(errno));
 		meshlink_errno = MESHLINK_ESTORAGE;
+		fclose(f);
 		return false;
 	}
 
-	uint8_t *buf = xmalloc(len);
+	size_t todo = (size_t)actual_len < *len ? (size_t)actual_len : *len;
+	*len = actual_len;
 
-	if(fread(buf, len, 1, f) != 1) {
+	if(!data) {
+		fclose(f);
+		return true;
+	}
+
+	if(fread(data, todo, 1, f) != 1) {
 		logger(mesh, MESHLINK_ERROR, "Cannot read config file: %s\n", strerror(errno));
+		meshlink_errno = MESHLINK_ESTORAGE;
+		fclose(f);
+		return false;
+	}
+
+	if(fclose(f)) {
+		logger(mesh, MESHLINK_ERROR, "Failed to close `%s': %s", filename, strerror(errno));
 		meshlink_errno = MESHLINK_ESTORAGE;
 		return false;
 	}
 
-	if(key) {
-		uint8_t *decrypted = xmalloc(len);
-		size_t decrypted_len = len;
-		chacha_poly1305_ctx_t *ctx = chacha_poly1305_init();
-		chacha_poly1305_set_key(ctx, key);
+	return true;
+}
 
-		if(len > 12 && chacha_poly1305_decrypt_iv96(ctx, buf, buf + 12, len - 12, decrypted, &decrypted_len)) {
+/// Store a blob of data.
+static bool store(meshlink_handle_t *mesh, const char *key, const void *data, size_t len) {
+	logger(mesh, MESHLINK_DEBUG, "store(%s, %p, %zu)", key ? key : "(null)", data, len);
+
+	if(mesh->store_cb) {
+		if(!mesh->store_cb(mesh, key, data, len)) {
+			logger(mesh, MESHLINK_ERROR, "Cannot write config file: %s", strerror(errno));
+			meshlink_errno = MESHLINK_ESTORAGE;
+			return false;
+		} else {
+			return true;
+		}
+	}
+
+	char filename[PATH_MAX];
+	snprintf(filename, sizeof(filename), "%s" SLASH "%s", mesh->confbase, key);
+
+	if(!len) {
+		if(unlink(filename) && errno != ENOENT) {
+			logger(mesh, MESHLINK_ERROR, "Failed to remove `%s': %s", filename, strerror(errno));
+			meshlink_errno = MESHLINK_ESTORAGE;
+			return false;
+		} else {
+			return true;
+		}
+	}
+
+	char tmp_filename[PATH_MAX];
+	snprintf(tmp_filename, sizeof(tmp_filename), "%s" SLASH "%s.tmp", mesh->confbase, key);
+
+	FILE *f = fopen(tmp_filename, "w");
+
+	if(!f) {
+		logger(mesh, MESHLINK_ERROR, "Failed to open `%s': %s", tmp_filename, strerror(errno));
+		meshlink_errno = MESHLINK_ESTORAGE;
+		return false;
+	}
+
+	if(fwrite(data, len, 1, f) != 1) {
+		logger(mesh, MESHLINK_ERROR, "Cannot write config file: %s", strerror(errno));
+		meshlink_errno = MESHLINK_ESTORAGE;
+		fclose(f);
+		return false;
+	}
+
+	if(fflush(f)) {
+		logger(mesh, MESHLINK_ERROR, "Failed to flush file: %s", strerror(errno));
+		meshlink_errno = MESHLINK_ESTORAGE;
+		fclose(f);
+		return false;
+	}
+
+	if(fsync(fileno(f))) {
+		logger(mesh, MESHLINK_ERROR, "Failed to sync file: %s\n", strerror(errno));
+		meshlink_errno = MESHLINK_ESTORAGE;
+		fclose(f);
+		return false;
+	}
+
+	if(fclose(f)) {
+		logger(mesh, MESHLINK_ERROR, "Failed to close `%s': %s", filename, strerror(errno));
+		meshlink_errno = MESHLINK_ESTORAGE;
+		return false;
+	}
+
+	if(rename(tmp_filename, filename)) {
+		logger(mesh, MESHLINK_ERROR, "Failed to rename `%s' to `%s': %s", tmp_filename, filename, strerror(errno));
+		meshlink_errno = MESHLINK_ESTORAGE;
+		return false;
+	}
+
+	return true;
+}
+
+/// Read a configuration file, decrypting it if necessary.
+bool config_load(meshlink_handle_t *mesh, const char *name, config_t *config) {
+	size_t buflen = 256;
+	uint8_t *buf = xmalloc(buflen);
+	size_t len = buflen;
+
+	if(!load(mesh, name, buf, &len)) {
+		return false;
+	}
+
+	buf = xrealloc(buf, len);
+
+	if(len > buflen) {
+		buflen = len;
+
+		if(!load(mesh, name, (void **)&buf, &len) || len != buflen) {
+			meshlink_errno = MESHLINK_ESTORAGE;
+			return false;
+		}
+	}
+
+	if(mesh->config_key) {
+		if(len < 12 + 16) {
+			logger(mesh, MESHLINK_ERROR, "Cannot decrypt config file\n");
+			meshlink_errno = MESHLINK_ESTORAGE;
+			config_free(config);
+			return false;
+		}
+
+		size_t decrypted_len = len - 12 - 16;
+		uint8_t *decrypted = xmalloc(decrypted_len);
+
+		chacha_poly1305_ctx_t *ctx = chacha_poly1305_init();
+		chacha_poly1305_set_key(ctx, mesh->config_key);
+
+		if(chacha_poly1305_decrypt_iv96(ctx, buf, buf + 12, len - 12, decrypted, &decrypted_len)) {
 			chacha_poly1305_exit(ctx);
 			free(buf);
-			config->buf = decrypted;
-			config->len = decrypted_len;
-			return true;
+			buf = decrypted;
+			len = decrypted_len;
 		} else {
 			logger(mesh, MESHLINK_ERROR, "Cannot decrypt config file\n");
 			meshlink_errno = MESHLINK_ESTORAGE;
@@ -554,55 +334,35 @@ bool config_read_file(meshlink_handle_t *mesh, FILE *f, config_t *config, const 
 	return true;
 }
 
-/// Write a configuration file to a FILE handle.
-bool config_write_file(meshlink_handle_t *mesh, FILE *f, const config_t *config, const void *key) {
-	assert(f);
+bool config_exists(meshlink_handle_t *mesh, const char *name) {
+	size_t len = 0;
 
-	if(key) {
-		uint8_t buf[config->len + 16];
-		size_t len = sizeof(buf);
-		uint8_t seqbuf[12];
-		randomize(&seqbuf, sizeof(seqbuf));
+	return load(mesh, name, NULL, &len) && len;
+}
+
+/// Write a configuration file, encrypting it if necessary.
+bool config_store(meshlink_handle_t *mesh, const char *name, const config_t *config) {
+	if(mesh->config_key) {
+		size_t encrypted_len = config->len + 16; // length of encrypted data
+		uint8_t encrypted[12 + encrypted_len]; // store sequence number at the start
+
+		randomize(encrypted, 12);
 		chacha_poly1305_ctx_t *ctx = chacha_poly1305_init();
-		chacha_poly1305_set_key(ctx, key);
-		bool success = false;
+		chacha_poly1305_set_key(ctx, mesh->config_key);
 
-		if(chacha_poly1305_encrypt_iv96(ctx, seqbuf, config->buf, config->len, buf, &len)) {
-			success = fwrite(seqbuf, sizeof(seqbuf), 1, f) == 1 && fwrite(buf, len, 1, f) == 1;
-
-			if(!success) {
-				logger(mesh, MESHLINK_ERROR, "Cannot write config file: %s", strerror(errno));
-			}
-
-			meshlink_errno = MESHLINK_ESTORAGE;
-		} else {
+		if(!chacha_poly1305_encrypt_iv96(ctx, encrypted, config->buf, config->len, encrypted + 12, &encrypted_len)) {
 			logger(mesh, MESHLINK_ERROR, "Cannot encrypt config file\n");
 			meshlink_errno = MESHLINK_ESTORAGE;
+			chacha_poly1305_exit(ctx);
+			return false;
 		}
 
 		chacha_poly1305_exit(ctx);
-		return success;
+
+		return store(mesh, name, encrypted, 12 + encrypted_len);
 	}
 
-	if(fwrite(config->buf, config->len, 1, f) != 1) {
-		logger(mesh, MESHLINK_ERROR, "Cannot write config file: %s", strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-	if(fflush(f)) {
-		logger(mesh, MESHLINK_ERROR, "Failed to flush file: %s", strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-	if(fsync(fileno(f))) {
-		logger(mesh, MESHLINK_ERROR, "Failed to sync file: %s\n", strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-	return true;
+	return store(mesh, name, config->buf, config->len);
 }
 
 /// Free resources of a loaded configuration file.
@@ -614,66 +374,24 @@ void config_free(config_t *config) {
 	config->len = 0;
 }
 
-/// Check the presence of a host configuration file.
-bool config_exists(meshlink_handle_t *mesh, const char *conf_subdir, const char *name) {
-	assert(conf_subdir);
-
-	if(!mesh->confbase) {
-		return false;
-	}
-
-	char path[PATH_MAX];
-	make_host_path(mesh, conf_subdir, name, path, sizeof(path));
-
-	return access(path, F_OK) == 0;
-}
-
-/// Read a host configuration file.
-bool config_read(meshlink_handle_t *mesh, const char *conf_subdir, const char *name, config_t *config, void *key) {
-	assert(conf_subdir);
-
-	if(!mesh->confbase) {
-		return false;
-	}
-
-	char path[PATH_MAX];
-	make_host_path(mesh, conf_subdir, name, path, sizeof(path));
-
-	FILE *f = fopen(path, "r");
-
-	if(!f) {
-		logger(mesh, MESHLINK_ERROR, "Failed to open `%s': %s", path, strerror(errno));
-		return false;
-	}
-
-	if(!config_read_file(mesh, f, config, key)) {
-		logger(mesh, MESHLINK_ERROR, "Failed to read `%s': %s", path, strerror(errno));
-		fclose(f);
-		return false;
-	}
-
-	fclose(f);
-
-	return true;
-}
-
-bool config_scan_all(meshlink_handle_t *mesh, const char *conf_subdir, const char *conf_type, config_scan_action_t action, void *arg) {
-	assert(conf_subdir);
-	assert(conf_type);
+bool config_ls(meshlink_handle_t *mesh, config_scan_action_t action) {
+	logger(mesh, MESHLINK_DEBUG, "ls(%p)", (void *)(intptr_t)action);
 
 	if(!mesh->confbase) {
 		return true;
 	}
 
+	if(mesh->ls_cb) {
+		return mesh->ls_cb(mesh, action);
+	}
+
 	DIR *dir;
 	struct dirent *ent;
-	char dname[PATH_MAX];
-	snprintf(dname, sizeof(dname), "%s" SLASH "%s" SLASH "%s", mesh->confbase, conf_subdir, conf_type);
 
-	dir = opendir(dname);
+	dir = opendir(mesh->confbase);
 
 	if(!dir) {
-		logger(mesh, MESHLINK_ERROR, "Could not open %s: %s", dname, strerror(errno));
+		logger(mesh, MESHLINK_ERROR, "Could not open %s: %s", mesh->confbase, strerror(errno));
 		meshlink_errno = MESHLINK_ESTORAGE;
 		return false;
 	}
@@ -683,7 +401,7 @@ bool config_scan_all(meshlink_handle_t *mesh, const char *conf_subdir, const cha
 			continue;
 		}
 
-		if(!action(mesh, ent->d_name, arg)) {
+		if(!action(mesh, ent->d_name, 0)) {
 			closedir(dir);
 			return false;
 		}
@@ -693,141 +411,142 @@ bool config_scan_all(meshlink_handle_t *mesh, const char *conf_subdir, const cha
 	return true;
 }
 
-/// Write a host configuration file.
-bool config_write(meshlink_handle_t *mesh, const char *conf_subdir, const char *name, const config_t *config, void *key) {
-	assert(conf_subdir);
-	assert(name);
-	assert(config);
+/// Re-encrypt a configuration file.
+static bool change_key(meshlink_handle_t *mesh, const char *name, size_t len) {
+	(void)len;
+	config_t config;
 
+	if(!config_load(mesh, name, &config)) {
+		return false;
+	}
+
+	size_t name_len = strlen(name);
+	char new_name[name_len + 3];
+	memcpy(new_name, name, name_len);
+
+	if(name_len == 13 && name[8] == '.') {
+		// Update meshlink.conf in-place
+		new_name[name_len] = 0;
+	} else {
+		memcpy(new_name + name_len, ".r", 3);
+	}
+
+	void *orig_key = mesh->config_key;
+	mesh->config_key = mesh->config_new_key;
+	bool result = config_store(mesh, new_name, &config);
+	mesh->config_key = orig_key;
+
+	return result;
+}
+
+static bool change_node_key(meshlink_handle_t *mesh, const char *name, size_t len) {
+	if(!check_id(name)) {
+		return true;
+	}
+
+	return change_key(mesh, name, len);
+}
+
+static bool cleanup_old_file(meshlink_handle_t *mesh, const char *name, size_t len) {
+	(void)len;
+	size_t name_len = strlen(name);
+
+	if(name_len < 3 || name[name_len - 2] != '.' || name[name_len - 1] != 'r') {
+		return true;
+	}
+
+	config_t config;
+
+	if(!config_load(mesh, name, &config)) {
+		return false;
+	}
+
+	char new_name[name_len - 1];
+	memcpy(new_name, name, name_len - 2);
+	new_name[name_len - 2] = '\0';
+
+	return config_store(mesh, new_name, &config) && store(mesh, name, NULL, 0);
+}
+
+bool config_cleanup_old_files(meshlink_handle_t *mesh) {
+	return config_ls(mesh, cleanup_old_file);
+}
+
+bool config_change_key(meshlink_handle_t *mesh, void *new_key) {
+	extern bool (*devtool_keyrotate_probe)(int stage);
+	mesh->config_new_key = new_key;
+
+	if(!config_ls(mesh, change_node_key)) {
+		return false;
+	}
+
+	if(!devtool_keyrotate_probe(1)) {
+		return false;
+	}
+
+	if(!change_key(mesh, "meshlink.conf", 0)) {
+		return false;
+	}
+
+	free(mesh->config_key);
+	mesh->config_key = new_key;
+
+	if(!devtool_keyrotate_probe(2)) {
+		return true;
+	}
+
+	config_cleanup_old_files(mesh);
+
+	devtool_keyrotate_probe(3);
+
+	return true;
+}
+
+/// Initialize the configuration directory
+bool config_init(meshlink_handle_t *mesh, const struct meshlink_open_params *params) {
 	if(!mesh->confbase) {
 		return true;
 	}
 
-	char path[PATH_MAX];
-	char tmp_path[PATH_MAX + 4];
-	make_host_path(mesh, conf_subdir, name, path, sizeof(path));
-	snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+	if(!mesh->load_cb) {
+		if(mkdir(mesh->confbase, 0700) && errno != EEXIST) {
+			logger(NULL, MESHLINK_ERROR, "Cannot create configuration directory %s: %s", mesh->confbase, strerror(errno));
+			meshlink_close(mesh);
+			meshlink_errno = MESHLINK_ESTORAGE;
+			return NULL;
+		}
 
-	FILE *f = fopen(tmp_path, "w");
+		mesh->lockfile = fopen(params->lock_filename, "w+");
 
-	if(!f) {
-		logger(mesh, MESHLINK_ERROR, "Failed to open `%s': %s", tmp_path, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
+		if(!mesh->lockfile) {
+			logger(NULL, MESHLINK_ERROR, "Cannot not open %s: %s\n", params->lock_filename, strerror(errno));
+			meshlink_errno = MESHLINK_ESTORAGE;
+			return false;
+		}
 
-	if(!config_write_file(mesh, f, config, key)) {
-		logger(mesh, MESHLINK_ERROR, "Failed to write `%s': %s", tmp_path, strerror(errno));
-		fclose(f);
-		return false;
-	}
+#ifdef FD_CLOEXEC
+		fcntl(fileno(mesh->lockfile), F_SETFD, FD_CLOEXEC);
+#endif
 
-	if(fclose(f)) {
-		logger(mesh, MESHLINK_ERROR, "Failed to close `%s': %s", tmp_path, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
+#ifdef HAVE_FLOCK
 
-	if(rename(tmp_path, path)) {
-		logger(mesh, MESHLINK_ERROR, "Failed to rename `%s' to `%s': %s", tmp_path, path, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
+		if(flock(fileno(mesh->lockfile), LOCK_EX | LOCK_NB) != 0) {
+			logger(NULL, MESHLINK_ERROR, "Cannot lock %s: %s\n", params->lock_filename, strerror(errno));
+			fclose(mesh->lockfile);
+			mesh->lockfile = NULL;
+			meshlink_errno = MESHLINK_EBUSY;
+			return false;
+		}
+
+#endif
 	}
 
 	return true;
 }
 
-/// Delete a host configuration file.
-bool config_delete(meshlink_handle_t *mesh, const char *conf_subdir, const char *name) {
-	assert(conf_subdir);
-	assert(name);
-
-	if(!mesh->confbase) {
-		return true;
+void config_exit(meshlink_handle_t *mesh) {
+	if(mesh->lockfile) {
+		fclose(mesh->lockfile);
+		mesh->lockfile = NULL;
 	}
-
-	char path[PATH_MAX];
-	make_host_path(mesh, conf_subdir, name, path, sizeof(path));
-
-	if(unlink(path) && errno != ENOENT) {
-		logger(mesh, MESHLINK_ERROR, "Failed to unlink `%s': %s", path, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-	return true;
-}
-
-/// Read the main configuration file.
-bool main_config_read(meshlink_handle_t *mesh, const char *conf_subdir, config_t *config, void *key) {
-	assert(conf_subdir);
-	assert(config);
-
-	if(!mesh->confbase) {
-		return false;
-	}
-
-	char path[PATH_MAX];
-	make_main_path(mesh, conf_subdir, path, sizeof(path));
-
-	FILE *f = fopen(path, "r");
-
-	if(!f) {
-		logger(mesh, MESHLINK_ERROR, "Failed to open `%s': %s", path, strerror(errno));
-		return false;
-	}
-
-	if(!config_read_file(mesh, f, config, key)) {
-		logger(mesh, MESHLINK_ERROR, "Failed to read `%s': %s", path, strerror(errno));
-		fclose(f);
-		return false;
-	}
-
-	fclose(f);
-
-	return true;
-}
-
-/// Write the main configuration file.
-bool main_config_write(meshlink_handle_t *mesh, const char *conf_subdir, const config_t *config, void *key) {
-	assert(conf_subdir);
-	assert(config);
-
-	if(!mesh->confbase) {
-		return true;
-	}
-
-	char path[PATH_MAX];
-	char tmp_path[PATH_MAX + 4];
-	make_main_path(mesh, conf_subdir, path, sizeof(path));
-	snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
-
-	FILE *f = fopen(tmp_path, "w");
-
-	if(!f) {
-		logger(mesh, MESHLINK_ERROR, "Failed to open `%s': %s", tmp_path, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-	if(!config_write_file(mesh, f, config, key)) {
-		logger(mesh, MESHLINK_ERROR, "Failed to write `%s': %s", tmp_path, strerror(errno));
-		fclose(f);
-		return false;
-	}
-
-	if(rename(tmp_path, path)) {
-		logger(mesh, MESHLINK_ERROR, "Failed to rename `%s' to `%s': %s", tmp_path, path, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		fclose(f);
-		return false;
-	}
-
-	if(fclose(f)) {
-		logger(mesh, MESHLINK_ERROR, "Failed to close `%s': %s", tmp_path, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-	return true;
 }

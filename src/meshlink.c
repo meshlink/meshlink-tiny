@@ -154,6 +154,11 @@ static bool write_main_config_files(meshlink_handle_t *mesh) {
 		return true;
 	}
 
+	/* Write our own host config file */
+	if(!node_write_config(mesh, mesh->self, true)) {
+		return false;
+	}
+
 	uint8_t buf[BUFSIZE];
 
 	/* Write the main config file */
@@ -171,16 +176,7 @@ static bool write_main_config_files(meshlink_handle_t *mesh) {
 
 	config_t config = {buf, packmsg_output_size(&out, buf)};
 
-	if(!main_config_write(mesh, "current", &config, mesh->config_key)) {
-		return false;
-	}
-
-	/* Write our own host config file */
-	if(!node_write_config(mesh, mesh->self, true)) {
-		return false;
-	}
-
-	return true;
+	return config_store(mesh, "meshlink.conf", &config);
 }
 
 typedef struct {
@@ -229,11 +225,6 @@ static bool finalize_join(join_state_t *state, const void *buf, uint16_t len) {
 	mesh->name = name;
 	mesh->self->name = xstrdup(name);
 	mesh->self->devclass = devclass == DEV_CLASS_UNKNOWN ? mesh->devclass : devclass;
-
-	// Initialize configuration directory
-	if(!config_init(mesh, "current")) {
-		return false;
-	}
 
 	if(!write_main_config_files(mesh)) {
 		return false;
@@ -301,11 +292,6 @@ static bool finalize_join(join_state_t *state, const void *buf, uint16_t len) {
 		}
 
 		node_add(mesh, n);
-	}
-
-	/* Ensure the configuration directory metadata is on disk */
-	if(!config_sync(mesh, "current") || (mesh->confbase && !sync_path(mesh->confbase))) {
-		return false;
 	}
 
 	if(!mesh->inviter_commits_first) {
@@ -500,22 +486,20 @@ static struct timespec idle(event_loop_t *loop, void *data) {
 	};
 }
 
+static bool invalidate_config_file(meshlink_handle_t *mesh, const char *name, size_t len) {
+	(void)len;
+
+	if(!check_id(name)) {
+		return true;
+	}
+
+	config_t empty_config = {NULL, 0};
+	return config_store(mesh, name, &empty_config);
+}
+
 static bool meshlink_setup(meshlink_handle_t *mesh) {
-	if(!config_destroy(mesh->confbase, "new")) {
-		logger(mesh, MESHLINK_ERROR, "Could not delete configuration in %s/new: %s\n", mesh->confbase, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-	if(!config_destroy(mesh->confbase, "old")) {
-		logger(mesh, MESHLINK_ERROR, "Could not delete configuration in %s/old: %s\n", mesh->confbase, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-	if(!config_init(mesh, "current")) {
-		logger(mesh, MESHLINK_ERROR, "Could not set up configuration in %s/current: %s\n", mesh->confbase, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
+	// Remove stray config files
+	if(!config_ls(mesh, invalidate_config_file)) {
 		return false;
 	}
 
@@ -540,18 +524,13 @@ static bool meshlink_setup(meshlink_handle_t *mesh) {
 		return false;
 	}
 
-	/* Ensure the configuration directory metadata is on disk */
-	if(!config_sync(mesh, "current")) {
-		return false;
-	}
-
 	return true;
 }
 
 static bool meshlink_read_config(meshlink_handle_t *mesh) {
 	config_t config;
 
-	if(!main_config_read(mesh, "current", &config, mesh->config_key)) {
+	if(!config_load(mesh, "meshlink.conf", &config)) {
 		logger(NULL, MESHLINK_ERROR, "Could not read main configuration file!");
 		return false;
 	}
@@ -585,6 +564,8 @@ static bool meshlink_read_config(meshlink_handle_t *mesh) {
 	xasprintf(&mesh->myport, "%u", myport);
 	mesh->private_key = ecdsa_set_private_key(private_key);
 	config_free(&config);
+
+	config_cleanup_old_files(mesh);
 
 	/* Create a node for ourself and read our host configuration file */
 
@@ -676,6 +657,31 @@ bool meshlink_open_params_set_netns(meshlink_open_params_t *params, int netns) {
 	return true;
 }
 
+bool meshlink_open_params_set_storage_callbacks(meshlink_open_params_t *params, meshlink_load_cb_t load_cb, meshlink_store_cb_t store_cb, meshlink_ls_cb_t ls_cb) {
+	logger(NULL, MESHLINK_DEBUG, "meshlink_set_storage_callbacks(%p, %p)", (void *)(intptr_t)load_cb, (void *)(intptr_t)store_cb);
+
+	if(!params) {
+		meshlink_errno = MESHLINK_EINVAL;
+		return false;
+	}
+
+	if(load_cb && (!store_cb || !ls_cb)) {
+		meshlink_errno = MESHLINK_EINVAL;
+		return false;
+	}
+
+	if(!load_cb && (store_cb || ls_cb)) {
+		meshlink_errno = MESHLINK_EINVAL;
+		return false;
+	}
+
+	params->load_cb = load_cb;
+	params->store_cb = store_cb;
+	params->ls_cb = ls_cb;
+
+	return true;
+}
+
 bool meshlink_open_params_set_storage_key(meshlink_open_params_t *params, const void *key, size_t keylen) {
 	logger(NULL, MESHLINK_DEBUG, "meshlink_open_params_set_storage_key(%p, %zu)", key, keylen);
 
@@ -737,8 +743,7 @@ bool meshlink_encrypted_key_rotate(meshlink_handle_t *mesh, const void *new_key,
 	}
 
 	// Create hash for the new key
-	void *new_config_key;
-	new_config_key = xmalloc(CHACHA_POLY1305_KEYLEN);
+	void *new_config_key = xmalloc(CHACHA_POLY1305_KEYLEN);
 
 	if(!prf(new_key, new_keylen, "MeshLink configuration key", 26, new_config_key, CHACHA_POLY1305_KEYLEN)) {
 		logger(mesh, MESHLINK_ERROR, "Error creating new configuration key!\n");
@@ -747,50 +752,11 @@ bool meshlink_encrypted_key_rotate(meshlink_handle_t *mesh, const void *new_key,
 		return false;
 	}
 
-	// Copy contents of the "current" confbase sub-directory to "new" confbase sub-directory with the new key
-
-	if(!config_copy(mesh, "current", mesh->config_key, "new", new_config_key)) {
-		logger(mesh, MESHLINK_ERROR, "Could not set up configuration in %s/old: %s\n", mesh->confbase, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
+	if(!config_change_key(mesh, new_config_key)) {
+		logger(mesh, MESHLINK_ERROR, "Error rotating the configuration key!\n");
 		pthread_mutex_unlock(&mesh->mutex);
 		return false;
 	}
-
-	devtool_keyrotate_probe(1);
-
-	// Rename confbase/current/ to confbase/old
-
-	if(!config_rename(mesh, "current", "old")) {
-		logger(mesh, MESHLINK_ERROR, "Cannot rename %s/current to %s/old\n", mesh->confbase, mesh->confbase);
-		meshlink_errno = MESHLINK_ESTORAGE;
-		pthread_mutex_unlock(&mesh->mutex);
-		return false;
-	}
-
-	devtool_keyrotate_probe(2);
-
-	// Rename confbase/new/ to confbase/current
-
-	if(!config_rename(mesh, "new", "current")) {
-		logger(mesh, MESHLINK_ERROR, "Cannot rename %s/new to %s/current\n", mesh->confbase, mesh->confbase);
-		meshlink_errno = MESHLINK_ESTORAGE;
-		pthread_mutex_unlock(&mesh->mutex);
-		return false;
-	}
-
-	devtool_keyrotate_probe(3);
-
-	// Cleanup the "old" confbase sub-directory
-
-	if(!config_destroy(mesh->confbase, "old")) {
-		pthread_mutex_unlock(&mesh->mutex);
-		return false;
-	}
-
-	// Change the mesh handle key with new key
-
-	free(mesh->config_key);
-	mesh->config_key = new_config_key;
 
 	pthread_mutex_unlock(&mesh->mutex);
 
@@ -965,6 +931,9 @@ meshlink_handle_t *meshlink_open_ex(const meshlink_open_params_t *params) {
 	mesh->log_cb = global_log_cb;
 	mesh->log_level = global_log_level;
 	mesh->packet = xmalloc(sizeof(vpn_packet_t));
+	mesh->load_cb = params->load_cb;
+	mesh->store_cb = params->store_cb;
+	mesh->ls_cb = params->ls_cb;
 
 	randomize(&mesh->prng_state, sizeof(mesh->prng_state));
 
@@ -1006,7 +975,7 @@ meshlink_handle_t *meshlink_open_ex(const meshlink_open_params_t *params) {
 	meshlink_queue_init(&mesh->outpacketqueue);
 
 	// Atomically lock the configuration directory.
-	if(!main_config_lock(mesh, params->lock_filename)) {
+	if(!config_init(mesh, params)) {
 		meshlink_close(mesh);
 		return NULL;
 	}
@@ -1015,9 +984,16 @@ meshlink_handle_t *meshlink_open_ex(const meshlink_open_params_t *params) {
 
 	bool new_configuration = false;
 
-	if(!meshlink_confbase_exists(mesh)) {
+	if(!meshlink_read_config(mesh)) {
 		if(!mesh->name) {
-			logger(NULL, MESHLINK_ERROR, "No configuration files found!\n");
+			logger(NULL, MESHLINK_ERROR, "No valid configuration files found!\n");
+			meshlink_close(mesh);
+			meshlink_errno = MESHLINK_ESTORAGE;
+			return NULL;
+		}
+
+		if(config_exists(mesh, "meshlink.conf")) {
+			logger(NULL, MESHLINK_ERROR, "Cannot read existing configuration!\n");
 			meshlink_close(mesh);
 			meshlink_errno = MESHLINK_ESTORAGE;
 			return NULL;
@@ -1025,14 +1001,6 @@ meshlink_handle_t *meshlink_open_ex(const meshlink_open_params_t *params) {
 
 		if(!meshlink_setup(mesh)) {
 			logger(NULL, MESHLINK_ERROR, "Cannot create initial configuration\n");
-			meshlink_close(mesh);
-			return NULL;
-		}
-
-		new_configuration = true;
-	} else {
-		if(!meshlink_read_config(mesh)) {
-			logger(NULL, MESHLINK_ERROR, "Cannot read main configuration\n");
 			meshlink_close(mesh);
 			return NULL;
 		}
@@ -1279,7 +1247,7 @@ void meshlink_close(meshlink_handle_t *mesh) {
 	free(mesh->packet);
 	ecdsa_free(mesh->private_key);
 
-	main_config_unlock(mesh);
+	config_exit(mesh);
 
 	pthread_mutex_unlock(&mesh->mutex);
 	pthread_mutex_destroy(&mesh->mutex);
@@ -1297,63 +1265,7 @@ bool meshlink_destroy_ex(const meshlink_open_params_t *params) {
 		return false;
 	}
 
-	if(!params->confbase) {
-		/* Ephemeral instances */
-		return true;
-	}
-
-	/* Exit early if the confbase directory itself doesn't exist */
-	if(access(params->confbase, F_OK) && errno == ENOENT) {
-		return true;
-	}
-
-	/* Take the lock the same way meshlink_open() would. */
-	FILE *lockfile = fopen(params->lock_filename, "w+");
-
-	if(!lockfile) {
-		logger(NULL, MESHLINK_ERROR, "Could not open lock file %s: %s", params->lock_filename, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-#ifdef FD_CLOEXEC
-	fcntl(fileno(lockfile), F_SETFD, FD_CLOEXEC);
-#endif
-
-#ifdef HAVE_MINGW
-	// TODO: use _locking()?
-#else
-
-	if(flock(fileno(lockfile), LOCK_EX | LOCK_NB) != 0) {
-		logger(NULL, MESHLINK_ERROR, "Configuration directory %s still in use\n", params->lock_filename);
-		fclose(lockfile);
-		meshlink_errno = MESHLINK_EBUSY;
-		return false;
-	}
-
-#endif
-
-	if(!config_destroy(params->confbase, "current") || !config_destroy(params->confbase, "new") || !config_destroy(params->confbase, "old")) {
-		logger(NULL, MESHLINK_ERROR, "Cannot remove sub-directories in %s: %s\n", params->confbase, strerror(errno));
-		return false;
-	}
-
-	if(unlink(params->lock_filename)) {
-		logger(NULL, MESHLINK_ERROR, "Cannot remove lock file %s: %s\n", params->lock_filename, strerror(errno));
-		fclose(lockfile);
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-	fclose(lockfile);
-
-	if(!sync_path(params->confbase)) {
-		logger(NULL, MESHLINK_ERROR, "Cannot sync directory %s: %s\n", params->confbase, strerror(errno));
-		meshlink_errno = MESHLINK_ESTORAGE;
-		return false;
-	}
-
-	return true;
+	return config_destroy(params);
 }
 
 bool meshlink_destroy(const char *confbase) {
@@ -1688,8 +1600,7 @@ bool meshlink_set_canonical_address(meshlink_handle_t *mesh, meshlink_node_t *no
 	}
 
 	pthread_mutex_unlock(&mesh->mutex);
-
-	return config_sync(mesh, "current");
+	return true;
 }
 
 bool meshlink_clear_canonical_address(meshlink_handle_t *mesh, meshlink_node_t *node) {
@@ -1714,8 +1625,7 @@ bool meshlink_clear_canonical_address(meshlink_handle_t *mesh, meshlink_node_t *
 	}
 
 	pthread_mutex_unlock(&mesh->mutex);
-
-	return config_sync(mesh, "current");
+	return true;
 }
 
 bool meshlink_join(meshlink_handle_t *mesh, const char *invitation) {
@@ -2165,10 +2075,6 @@ bool meshlink_import(meshlink_handle_t *mesh, const char *data) {
 	if(!packmsg_done(&in)) {
 		logger(mesh, MESHLINK_ERROR, "Invalid data\n");
 		meshlink_errno = MESHLINK_EPEER;
-		return false;
-	}
-
-	if(!config_sync(mesh, "current")) {
 		return false;
 	}
 

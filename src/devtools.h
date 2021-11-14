@@ -57,8 +57,10 @@ extern void (*devtool_trybind_probe)(void);
  *  On assigning a debug function variable invokes callback for each stage from the key rotate API.
  *
  *  @param stage Debug stage number.
+ *
+ *  @return True if key rotation should continue as normal, false to introduce an error.
  */
-extern void (*devtool_keyrotate_probe)(int stage);
+extern bool (*devtool_keyrotate_probe)(int stage);
 
 /// Debug function pointer variable for SPTPS key renewal
 /** This function pointer variable is a userspace tracepoint or debugger callback for
